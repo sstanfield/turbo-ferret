@@ -51,6 +51,8 @@ pub struct SourceChanges {
     version: u32,
     /// The last change, if it was a change to one item.
     last_item: Option<(usize, Option<WidgetId>)>,
+    /// The version at which every item was last removed.
+    cleared_at: Option<u32>,
 }
 
 impl SourceChanges {
@@ -63,6 +65,19 @@ impl SourceChanges {
     pub fn items_changed(&mut self) {
         self.version = self.version.wrapping_add(1);
         self.last_item = None;
+    }
+
+    /// Every item was removed (viewers also drop their selection, whatever is added
+    /// before they next look). TB: InvokeAllItemsRemoved
+    pub fn all_items_removed(&mut self) {
+        self.items_changed();
+        self.cleared_at = Some(self.version);
+    }
+
+    /// True if every item was removed after a viewer last saw `seen`.
+    pub fn cleared_since(&self, seen: u32) -> bool {
+        // Versions wrap: compare how long ago each was.
+        self.cleared_at.is_some_and(|c| self.version.wrapping_sub(c) < self.version.wrapping_sub(seen))
     }
 
     /// One item changed in a way that should update viewers. `exclude_viewer` is the
@@ -255,7 +270,7 @@ impl StringItemSource {
     pub fn clear(&mut self) {
         if !self.items.is_empty() {
             self.items.clear();
-            self.changes.items_changed();
+            self.changes.all_items_removed();
         }
     }
 

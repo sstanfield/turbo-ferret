@@ -84,7 +84,9 @@ impl PopupAlignment {
                     }
                     // Limit the height to what is free in the worst case: the target
                     // in the middle of the root.
-                    h = h.min(rs.h / 2 - ts.h);
+                    // (Never negative: TB let it go below zero for a target taller
+                    // than half the root.)
+                    h = h.min((rs.h / 2 - ts.h).max(0));
                 }
                 (avoid_w, avoid_h) = (ts.w, ts.h);
             }
@@ -180,9 +182,12 @@ impl PopupWindow {
         self.watcher = Some(cx.add_listener(alloc::boxed::Box::new(watcher)));
     }
 
-    fn removed(&mut self, cx: &mut Ctx) {
+    /// Stop watching. Called when the window is removed and again when it is freed
+    /// (the first is skipped if it is removed from inside one of its own hooks).
+    /// TB: TBPopupWindow::~TBPopupWindow
+    fn removed(&mut self, ui: &mut Ui) {
         if let Some(w) = self.watcher.take() {
-            cx.remove_listener(w);
+            ui.remove_listener(w);
         }
     }
 
@@ -207,6 +212,9 @@ impl Widget for PopupWindow {
     }
     fn on_removed(&mut self, cx: &mut Ctx) {
         self.removed(cx);
+    }
+    fn on_free(&mut self, ui: &mut Ui) {
+        self.removed(ui);
     }
     /// TB: TBPopupWindow::GetEventDestination
     fn event_destination(&self, _this: NodeRef<'_>) -> Option<WidgetId> {
@@ -269,6 +277,10 @@ impl Widget for MenuWindow {
 
     fn on_removed(&mut self, cx: &mut Ctx) {
         self.popup.removed(cx);
+    }
+
+    fn on_free(&mut self, ui: &mut Ui) {
+        self.popup.removed(ui);
     }
 
     fn event_destination(&self, _this: NodeRef<'_>) -> Option<WidgetId> {

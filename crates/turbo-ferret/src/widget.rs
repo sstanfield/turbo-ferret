@@ -196,8 +196,15 @@ pub trait Widget: Any {
     /// Custom resource properties; the generic ones are already applied.
     fn on_inflate(&mut self, cx: &mut Ctx, res: &ResNode) {}
     fn on_added(&mut self, cx: &mut Ctx) {}
-    /// Called before detaching; descendants still resolve.
+    /// Called before detaching; descendants still resolve. Only for the widget that
+    /// is removed (not for its descendants), and not if it is removed from inside
+    /// one of its own hooks: release outside resources in [`on_free`](Self::on_free).
     fn on_removed(&mut self, cx: &mut Ctx) {}
+    /// The widget is gone for good: release what it holds outside its own subtree
+    /// (global listeners, helper widgets elsewhere in the tree). Called exactly once
+    /// for every widget, when its node is freed, whichever way it was removed; its
+    /// node and its children are no longer in the tree. TB: the widget's destructor
+    fn on_free(&mut self, ui: &mut crate::ui::Ui) {}
     fn on_child_added(&mut self, cx: &mut Ctx, child: WidgetId) {}
     fn on_child_removed(&mut self, cx: &mut Ctx, child: WidgetId) {}
     fn on_die(&mut self, cx: &mut Ctx) -> DieAction {
@@ -208,7 +215,6 @@ pub trait Widget: Any {
     fn on_visibility_changed(&mut self, cx: &mut Ctx) {}
     fn on_skin_changed(&mut self, cx: &mut Ctx) {}
     fn on_font_changed(&mut self, cx: &mut Ctx) {}
-    fn on_scroll(&mut self, cx: &mut Ctx, delta: Point) {}
     /// A window was activated or deactivated (only called on window nodes).
     fn on_window_active_changed(&mut self, cx: &mut Ctx, active: bool) {}
 

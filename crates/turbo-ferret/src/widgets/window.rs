@@ -45,6 +45,8 @@ pub struct Window {
     /// Fade in on add and out on die.
     pub animate: bool,
     title_h: i32,
+    /// The title height the content was last placed for (only `arrange` sets it).
+    arranged_title_h: i32,
     mover: Option<WidgetId>,
     resizer: Option<WidgetId>,
     textfield: Option<WidgetId>,
@@ -58,6 +60,7 @@ impl Default for Window {
             settings: WindowSettings::DEFAULT,
             animate: true,
             title_h: 0,
+            arranged_title_h: 0,
             mover: None,
             resizer: None,
             textfield: None,
@@ -221,8 +224,9 @@ impl Widget for Window {
         let me = cx.this();
         // If the title height changed (skin or font), move the content with it.
         let th = self.title_height(cx);
-        let dt = th - self.title_h;
+        let dt = th - self.arranged_title_h;
         self.title_h = th;
+        self.arranged_title_h = th;
         if dt != 0 {
             for c in cx.children(me).to_vec() {
                 if self.is_internal(c) {
@@ -274,9 +278,16 @@ impl Widget for Window {
     }
 
     /// Keep the resizer on top. TB: TBWindow::OnChildAdded
-    fn on_child_added(&mut self, cx: &mut Ctx, _child: WidgetId) {
+    fn on_child_added(&mut self, cx: &mut Ctx, child: WidgetId) {
         if let Some(r) = self.resizer {
             cx.set_z(r, Z::Top);
+        }
+        // The first content is placed below the title as it is now: from here on
+        // only `arrange` moves content when the title height changes.
+        let me = cx.this();
+        let first = !self.is_internal(child) && !cx.children(me).iter().any(|&c| c != child && !self.is_internal(c));
+        if first {
+            self.arranged_title_h = self.title_h;
         }
     }
 

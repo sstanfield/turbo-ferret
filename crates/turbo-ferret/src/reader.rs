@@ -155,7 +155,9 @@ impl Ui {
     pub fn inflate_properties(&mut self, w: WidgetId, node: &ResNode) {
         let doc = Doc { root: node, file: "<node>" };
         self.top(|ui| {
-            call_hook(ui, w, |b, cx| b.on_inflate(cx, node));
+            let resolved = ui.lookup(&doc).resolved_properties(node, &is_widget_name);
+            let props = resolved.as_ref().unwrap_or(node);
+            call_hook(ui, w, |b, cx| b.on_inflate(cx, props));
             ui.apply_generic(&doc, w, node, ValueKind::Null);
             ui.apply_font(&doc, w, node);
         });
@@ -200,7 +202,11 @@ impl Ui {
             }
         }
         // Custom properties first (TB: subclass OnInflate before TBWidget::OnInflate).
-        call_hook(self, w, |b, cx| b.on_inflate(cx, node));
+        // The widget reads the node directly, so references and language strings in
+        // its properties are resolved for it first.
+        let resolved = self.lookup(doc).resolved_properties(node, &is_widget_name);
+        let props = resolved.as_ref().unwrap_or(node);
+        call_hook(self, w, |b, cx| b.on_inflate(cx, props));
         self.apply_generic(doc, w, node, f.sync);
         if self.tree.parent(w).is_none() {
             let z = if self.has_flag(target, NodeFlags::INFLATE_BOTTOM) { Z::Bottom } else { Z::Top };

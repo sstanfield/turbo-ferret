@@ -87,6 +87,10 @@ impl Widget for ProgressSpinner {
         cx.invalidate();
     }
     fn on_message(&mut self, cx: &mut Ctx, _m: &Message) {
+        // Stopped while this message was on its way: no more frames.
+        if self.value <= 0 {
+            return;
+        }
         self.frame += 1;
         cx.invalidate();
         let me = cx.this();

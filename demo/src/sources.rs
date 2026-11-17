@@ -153,7 +153,7 @@ impl AdvancedSource {
 
     pub fn clear(&mut self) {
         self.items.clear();
-        self.changes.items_changed();
+        self.changes.all_items_removed();
     }
 
     /// Check or uncheck an item. `viewer` is the list whose check box did it; it

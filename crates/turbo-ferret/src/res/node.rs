@@ -265,6 +265,53 @@ impl<'a> Lookup<'a> {
         refs::follow(self.refs, self.root, node)
     }
 
+    /// A copy of `node` whose property nodes are resolved: a property that refers
+    /// elsewhere (`@tree>path`, `@>path`) is replaced by the node it refers to, and a
+    /// `@key` string by the language's string. `None` if no property needs it, so the
+    /// node can be used as it is. Nodes for which `is_widget` is true are copied
+    /// unchanged (they are resolved when they are inflated themselves).
+    ///
+    /// Code that reads a node with the plain [`ResNode`] getters, like a widget's
+    /// `on_inflate`, sees what TB's `GetValueString` and `GetNodeFollowRef` gave.
+    pub fn resolved_properties(&self, node: &'a ResNode, is_widget: &dyn Fn(&str) -> bool) -> Option<ResNode> {
+        fn refers(n: &ResNode, is_widget: &dyn Fn(&str) -> bool) -> bool {
+            n.children
+                .iter()
+                .filter(|c| !is_widget(&c.name))
+                .any(|c| matches!(&c.value, Value::Str(s) if s.starts_with('@')) || refers(c, is_widget))
+        }
+        if !refers(node, is_widget) {
+            return None;
+        }
+        Some(ResNode {
+            name: node.name.clone(),
+            value: node.value.clone(),
+            children: self.resolved_children(node, is_widget, 0),
+        })
+    }
+
+    fn resolved_children(&self, node: &'a ResNode, is_widget: &dyn Fn(&str) -> bool, depth: u32) -> Vec<ResNode> {
+        /// References into subtrees that refer on are followed this deep.
+        const MAX_DEPTH: u32 = 16;
+        node.children
+            .iter()
+            .map(|c| {
+                if is_widget(&c.name) || depth >= MAX_DEPTH {
+                    return c.clone();
+                }
+                let target = self.follow(c);
+                let value = match (&target.value, self.lang) {
+                    (Value::Str(s), Some(lang)) => {
+                        let text = lang.resolve(s);
+                        if *text == **s { target.value.clone() } else { Value::str(&text) }
+                    }
+                    (v, _) => v.clone(),
+                };
+                ResNode { name: c.name.clone(), value, children: self.resolved_children(target, is_widget, depth + 1) }
+            })
+            .collect()
+    }
+
     /// The node at `path` under `from`, with references followed.
     /// TB: tb_node_tree.cpp TBNode::GetNodeFollowRef
     pub fn node(&self, from: &'a ResNode, path: &str) -> Option<&'a ResNode> {

@@ -187,6 +187,12 @@ impl Widget for DebugWindow {
         }
     }
 
+    fn on_free(&mut self, ui: &mut Ui) {
+        if let Some(l) = self.listener.take() {
+            ui.remove_listener(l);
+        }
+    }
+
     /// TB: DebugSettingsWindow::OnEvent
     fn on_event(&mut self, cx: &mut Ctx, ev: &Event) -> bool {
         if ev.kind == EventKind::Changed {

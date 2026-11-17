@@ -291,6 +291,12 @@ impl Ui {
             sub.clear();
             self.tree.collect_subtree(id, &mut sub);
             for &w in sub.iter().rev() {
+                // The destructor. Whatever it removes is freed by this loop too.
+                if let Some(mut b) = self.tree.nodes.get_mut(w).and_then(|n| n.behaviour.take()) {
+                    self.depth += 1;
+                    b.on_free(self);
+                    self.depth -= 1;
+                }
                 self.tree.layout_params.remove(w);
                 self.tree.scrollers.remove(w);
                 self.tree.connections.remove(w);

@@ -75,6 +75,19 @@ impl MessageWindow {
     }
 }
 
+impl MessageWindow {
+    /// Stop watching the target and take the dimmer away.
+    /// TB: TBMessageWindow::~TBMessageWindow
+    fn release(&mut self, ui: &mut Ui) {
+        if let Some(w) = self.watcher.take() {
+            ui.remove_listener(w);
+        }
+        if let Some(d) = self.dimmer.take() {
+            ui.remove(d);
+        }
+    }
+}
+
 impl Widget for MessageWindow {
     fn type_name(&self) -> &'static str {
         "MessageWindow"
@@ -88,14 +101,14 @@ impl Widget for MessageWindow {
         self.watcher = Some(cx.add_listener(Box::new(watcher)));
     }
 
-    /// TB: TBMessageWindow::~TBMessageWindow
     fn on_removed(&mut self, cx: &mut Ctx) {
-        if let Some(w) = self.watcher.take() {
-            cx.remove_listener(w);
-        }
-        if let Some(d) = self.dimmer.take() {
-            cx.remove(d);
-        }
+        self.release(cx);
+    }
+
+    /// Also when the window was removed from inside its own hook (by the handler
+    /// of its answer, for example), where `on_removed` is skipped.
+    fn on_free(&mut self, ui: &mut Ui) {
+        self.release(ui);
     }
 
     /// TB: TBMessageWindow::GetEventDestination

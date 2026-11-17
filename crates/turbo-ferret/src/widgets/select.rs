@@ -388,10 +388,11 @@ impl Widget for SelectList {
         let update = match self.source.as_ref().and_then(|s| s.try_borrow().ok()) {
             Some(src) => {
                 let u = src.changes().since(self.seen, cx.this());
+                let cleared = src.changes().cleared_since(self.seen);
                 if !self.list_is_invalid {
                     self.seen = src.changes().version();
                 }
-                if u != SourceUpdate::None && src.num_items() == 0 {
+                if cleared || (u != SourceUpdate::None && src.num_items() == 0) {
                     // TB: OnAllItemsRemoved
                     self.value = -1;
                 }
@@ -468,6 +469,9 @@ pub struct SelectDropdown {
     arrow: Option<WidgetId>,
     /// The menu window, while it is open.
     window: Option<WidgetId>,
+    /// The open menu's list (kept, because the menu cannot be asked while it is
+    /// reporting a choice).
+    window_list: Option<WidgetId>,
 }
 
 impl Default for SelectDropdown {
@@ -480,6 +484,7 @@ impl Default for SelectDropdown {
             value: -1,
             arrow: None,
             window: None,
+            window_list: None,
         }
     }
 }
@@ -553,6 +558,7 @@ impl SelectDropdown {
         cx.set_skin(menu, id);
         if cx.show_menu_window(menu, source, &PopupAlignment::default(), self.value) {
             self.window = Some(menu);
+            self.window_list = cx.get::<MenuWindow>(menu).and_then(|m| m.list());
         } else {
             cx.remove(menu);
         }
@@ -566,7 +572,8 @@ impl SelectDropdown {
     }
 
     fn menu_list(&self, cx: &Ctx) -> Option<WidgetId> {
-        cx.get::<MenuWindow>(self.menu_if_open(cx)?)?.list()
+        self.menu_if_open(cx)?;
+        self.window_list.filter(|&l| cx.exists(l))
     }
 }
 
@@ -630,9 +637,17 @@ impl Widget for SelectDropdown {
             return true;
         }
         if ev.kind == EventKind::Click && self.menu_if_open(cx) == Some(ev.target) {
-            // An item was chosen in the menu; its index comes with the event.
-            if let Some(v) = ev.value.as_ref() {
-                self.set_selected(cx, v.as_int());
+            // An item was chosen. The menu's own list knows the choice, unless it is
+            // the one sending this click (it is busy then): the index comes with
+            // the event. A choice in a sub menu leaves the list's value alone, and
+            // the index with the event is then one of the sub menu's.
+            // TB: TBSelectDropdown::OnEvent (GetMenuIfOpen()->GetList()->GetValue())
+            let value = self
+                .menu_list(cx)
+                .and_then(|l| cx.get::<SelectList>(l).map(|l| l.selected()))
+                .or_else(|| ev.value.as_ref().map(|v| v.as_int()));
+            if let Some(v) = value {
+                self.set_selected(cx, v);
             }
             return true;
         }

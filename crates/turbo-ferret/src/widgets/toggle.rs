@@ -306,7 +306,13 @@ impl Widget for Section {
 
     /// TB: TBSection::SetValue
     fn set_value(&mut self, cx: &mut Ctx, v: &Value) {
+        let old = self.value;
         self.value = v.as_int();
+        if self.value != old {
+            // TB set this from the header's change, which this section does not
+            // hear while it is in this hook.
+            self.pending_scroll = self.value != 0;
+        }
         if let Some(h) = self.header {
             cx.set_value(h, self.value);
         }

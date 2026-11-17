@@ -59,7 +59,17 @@ impl ScrollBar {
         self.visible = visible;
         let v = self.value;
         self.set_value_impl(cx, v, emit);
+        // While the handle is dragged, keep the pointer's grip on it: the point
+        // where it went down is in the handle's coordinates, and the handle moves
+        // (and resizes) with the new limits. Without this the content jumps on the
+        // next pointer move. TB: TBScrollBar::SetLimits (ConvertToRoot/ConvertFromRoot)
+        let dragged = self.handle.filter(|&h| cx.captured() == Some(h));
+        let before = dragged.map(|h| cx.rect(h).origin());
         self.update_handle(cx);
+        if let (Some(h), Some(before)) = (dragged, before) {
+            let moved = cx.rect(h).origin() - before;
+            cx.input.down_pos -= moved;
+        }
     }
 
     /// TB: TBScrollBar::SetValueDouble

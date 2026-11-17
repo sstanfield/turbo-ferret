@@ -33,6 +33,11 @@ pub trait Renderer {
     /// `size.w * size.h * 4` bytes. Any size (no power-of-two requirement).
     fn create_bitmap(&mut self, size: Size, rgba: &[u8]) -> Option<BitmapId>;
     /// Replace the whole contents (same size as created).
+    ///
+    /// The core calls this in the middle of a frame only to add glyphs to a glyph
+    /// cache page: texels that quads drawn earlier in the frame use are never
+    /// changed. So a backend whose draws are only queued until the end of the frame
+    /// (Metal) may let those quads see the new contents.
     fn update_bitmap(&mut self, bitmap: BitmapId, rgba: &[u8]);
     fn destroy_bitmap(&mut self, bitmap: BitmapId);
     /// Draw quads using one bitmap (`None` = solid color) inside one clip rect

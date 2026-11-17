@@ -11,6 +11,7 @@ use crate::geom::{Point, Size};
 use crate::id::TbId;
 use crate::layout::size::{Gravity, Visibility};
 use crate::layout::stack::LayoutDistributionPosition;
+use crate::layout::{PreferredSize, SizeConstraints};
 use crate::msg::Message;
 use crate::res::ResNode;
 use crate::ui::{Ctx, FocusReason, NodeRef};
@@ -128,6 +129,14 @@ impl Widget for Button {
         self.update_textfield_visibility(cx);
     }
 
+    /// The empty text field of an image-only button must not count, also when the
+    /// button is measured before its first update (TB hid it as soon as a child was
+    /// added: ButtonLayout::OnChildAdded).
+    fn measure_content(&mut self, cx: &mut Ctx, sc: SizeConstraints) -> PreferredSize {
+        self.update_textfield_visibility(cx);
+        cx.default_measure_content(sc)
+    }
+
     /// Children do not get pointer input. TB: TBButton::GetHitStatus
     fn hit_test(&self, this: NodeRef, p: Point) -> HitStatus {
         if HitStatus::default_for(this, p) == HitStatus::NoHit { HitStatus::NoHit } else { HitStatus::HitNoChildren }
@@ -168,7 +177,11 @@ impl Widget for Button {
             ev.touch = true;
             cx.emit(ev);
         }
-        cx.post_message_delayed(me, AUTO_CLICK, Value::Null, AUTO_CLICK_REPEAT_DELAY);
+        // Repeat while held. (The release may not have been able to cancel a
+        // message that was already on its way.)
+        if cx.captured() == Some(me) {
+            cx.post_message_delayed(me, AUTO_CLICK, Value::Null, AUTO_CLICK_REPEAT_DELAY);
+        }
     }
 
     /// Pressed state as value. TB: TBButton::GetValue
