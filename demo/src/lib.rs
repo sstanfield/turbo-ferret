@@ -11,9 +11,11 @@ pub mod sources;
 use std::rc::Rc;
 
 use turbo_ferret::anim::{ALMOST_ZERO_OPACITY, AnimSpec, Curve};
+use turbo_ferret::font::BackgroundFont;
 use turbo_ferret::widgets::{
-    Button, EditField, MessageButtons, MessageSettings, PopupAlignment, ResizeFit, ScrollContainer, ScrollMode,
-    SelectDropdown, SelectList, SkinImage, SourceRef, StringItem, StringItemSource, TabContainer, TextAlign, Window,
+    Button, EditField, ImageWidget, MessageButtons, MessageSettings, PopupAlignment, ResizeFit, ScrollContainer,
+    ScrollMode, SelectDropdown, SelectList, SkinImage, SourceRef, StringItem, StringItemSource, TabContainer,
+    TextAlign, Window,
 };
 use turbo_ferret::*;
 
@@ -102,6 +104,9 @@ fn text_menu_source() -> SourceRef {
             ("RGB font (Neon)", "rgb font Neon"),
             ("RGB font (Orangutang)", "rgb font Orangutang"),
             ("RGB font (Orange)", "rgb font Orange"),
+            // Not in TB's menu: its demo is built with the bitmap font renderer only.
+            ("TrueType font (Vera)", "ttf font Vera"),
+            ("TrueType font with a glow", "ttf font VeraGlow"),
             ("-", ""),
             ("Glyph cache stresstest (CJK)", "CJK"),
             ("-", ""),
@@ -136,6 +141,22 @@ fn text_menu_choice(ui: &mut Ui, edit: WidgetId, choice: TbId) {
         with_font_id(ui, "Orangutang");
     } else if choice == tbid!("rgb font Orange") {
         with_font_id(ui, "Orange");
+    } else if choice == tbid!("ttf font Vera") {
+        with_font_id(ui, "Vera");
+    } else if choice == tbid!("ttf font VeraGlow") {
+        // A face with a blurred copy of itself behind it. Both come from the same
+        // file, registered under two names (see `Demo::new`).
+        let mut fd = ui.default_font();
+        fd.id = tbid!("VeraGlowText");
+        fd.size = ui.dimension_converter().dp_to_px(20).clamp(1, 255) as u16;
+        let glow = FontDesc::new(tbid!("VeraGlow"), fd.size);
+        ui.create_font_face(fd);
+        ui.create_font_face(glow);
+        let radius = ui.dimension_converter().dp_to_px(3).clamp(1, 64) as u8;
+        ui.fonts_mut().set_blur_radius(glow, radius);
+        let background = BackgroundFont { desc: glow, color: Color::rgb(0, 150, 255), offset: Point::ZERO };
+        ui.fonts_mut().set_background_font(fd, Some(background));
+        ui.set_font(edit, Some(fd));
     } else if choice == tbid!("CJK") {
         let mut text = String::new();
         for (i, cp) in (0x4E00u32..=0x9FCC).enumerate() {
@@ -278,6 +299,14 @@ impl UiListener for DemoListener {
             open_resource_window(ui, &res("test_animations.tb.txt"));
         } else if id == tbid!("test-connections") {
             open_resource_window(ui, &res("test_connections.tb.txt"));
+        } else if id == tbid!("test-image") {
+            open_resource_window(ui, &res("test_image_widget.tb.txt"));
+        } else if id == tbid!("remove") && parent.is_some_and(|p| ui.get::<ImageWidget>(p).is_some()) {
+            // The image window: the button on an image removes it. Its image is
+            // unloaded when no other widget shows it. TB: ImageWindow::OnEvent
+            if let Some(image) = parent {
+                ui.remove(image);
+            }
         } else if id == tbid!("test-scroll-container") {
             open_scroll_container_window(ui, &self.sources);
         } else if id == tbid!("test-list") {
@@ -319,7 +348,8 @@ impl UiListener for DemoListener {
                 ui.post_message_delayed(sink, tbid!("delayedmsg"), Value::Int(at as i32), 2000);
             }
         } else if id == tbid!("debug settings") {
-            message(ui, target, TbId::NONE, "Debug settings", "The debug overlay comes with a later milestone.");
+            // TB: ShowDebugInfoSettingsWindow
+            ui.show_debug_window();
         // == Text window ==
         } else if id == tbid!("clear") || id == tbid!("undo") || id == tbid!("redo") {
             if let Some(edit) = win.and_then(|w| ui.find_as::<EditField>(w, tbid!("editfield"))) {
@@ -547,6 +577,17 @@ pub fn open_main_window(ui: &mut Ui) -> Option<WidgetId> {
     Some(w)
 }
 
+/// TB's resource files name files from TB's own working directory
+/// (`Demo/demo01/images/image_1.png`). Here those are under the resource root
+/// without `Demo/`.
+struct DemoLoader(FsLoader);
+
+impl ResourceLoader for DemoLoader {
+    fn load(&mut self, path: &str) -> Result<std::borrow::Cow<'static, [u8]>, LoadError> {
+        self.0.load(path.strip_prefix("Demo/").unwrap_or(path))
+    }
+}
+
 /// The demo state: a `Ui` with the skin, fonts and language loaded and the main
 /// window open.
 pub struct Demo {
@@ -558,7 +599,7 @@ pub struct Demo {
 impl Demo {
     /// TB: Demo01.cpp DemoApplication::Init
     pub fn new(resource_root: &str, viewport: Size, dpi: i32) -> Demo {
-        let mut ui = Ui::new(Config::for_dpi(dpi), Services::with_loader(FsLoader::new(resource_root)));
+        let mut ui = Ui::new(Config::for_dpi(dpi), Services::with_loader(DemoLoader(FsLoader::new(resource_root))));
         if let Err(e) = ui.load_language("language/lng_en.tb.txt") {
             eprintln!("demo: language: {e}");
         }
@@ -569,6 +610,13 @@ impl Demo {
         ui.add_font("Neon", "demo_fonts/neon.tb.txt");
         ui.add_font("Orangutang", "demo_fonts/orangutang.tb.txt");
         ui.add_font("Orange", "demo_fonts/orange.tb.txt");
+        // TrueType: the font TB ships as vera.ttf, under three names so the text
+        // window can show it plain and with a blurred copy behind it.
+        // TB: Demo01.cpp (register_stb_font_renderer, AddFontInfo("resources/vera.ttf", "Vera"))
+        ui.fonts_mut().add_backend(Box::new(turbo_ferret_ttf::TtfBackend::new()));
+        for name in ["Vera", "VeraGlowText", "VeraGlow"] {
+            ui.add_font(name, "vera.ttf");
+        }
         let size = ui.dimension_converter().dp_to_px(14).clamp(1, 255) as u16;
         if !ui.set_default_font(FontDesc::new(tbid!("Segoe"), size)) {
             eprintln!("demo: could not load the default font");

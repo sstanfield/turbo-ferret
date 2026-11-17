@@ -191,6 +191,7 @@ dependencies = [
  "turbo-ferret",
  "turbo-ferret-miniquad",
  "turbo-ferret-soft",
+ "turbo-ferret-ttf",
 ]
 
 [[package]]

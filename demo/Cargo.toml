@@ -15,7 +15,8 @@ name = "turbo-ferret-demo"
 path = "src/main.rs"
 
 [dependencies]
-turbo-ferret = { path = "../crates/turbo-ferret" }
+turbo-ferret = { path = "../crates/turbo-ferret", features = ["debug"] }
+turbo-ferret-ttf = { path = "../crates/turbo-ferret-ttf" }
 turbo-ferret-soft = { path = "../crates/turbo-ferret-soft" }
 turbo-ferret-miniquad = { path = "../crates/turbo-ferret-miniquad" }
 miniquad = "0.4.11"

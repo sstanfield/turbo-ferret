@@ -15,12 +15,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libx11-dev libxi-dev libgl1-mesa-dev libasound2-dev
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      # The demo turns the core's `debug` feature on, so the workspace run tests the
+      # core with it and the second run without.
       - run: cargo test --workspace
+      - run: cargo test -p turbo-ferret
       - name: no_std build
-        run: cargo build -p turbo-ferret -p turbo-ferret-soft --no-default-features --features turbo-ferret/png --target thumbv7em-none-eabihf
+        run: cargo build -p turbo-ferret -p turbo-ferret-soft -p turbo-ferret-ttf --no-default-features --features turbo-ferret/png --target thumbv7em-none-eabihf
+      - name: no_std build with debug
+        run: cargo build -p turbo-ferret --no-default-features --features debug --target thumbv7em-none-eabihf
   msrv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.86
-      - run: cargo check -p turbo-ferret -p turbo-ferret-soft
+      - run: cargo check -p turbo-ferret -p turbo-ferret-soft -p turbo-ferret-ttf

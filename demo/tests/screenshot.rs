@@ -413,3 +413,131 @@ fn demo_m7_windows_headless() {
     }
     shot(&mut demo, &mut soft, "demo_m7_resource_edit2.png");
 }
+
+/// M8: TrueType fonts in the text window, the image window, the debug window.
+#[test]
+fn demo_m8_windows_headless() {
+    use turbo_ferret::debug::{DebugSettings, DebugWindow};
+    use turbo_ferret::widgets::{EditField, ImageWidget, MenuWindow, SelectList};
+    let size = Size::new(1280, 800);
+    let mut demo = Demo::new(&default_resource_root(), size, 96);
+    let main = demo.main.unwrap();
+    let root = demo.ui.root();
+    let mut soft = SoftRenderer::new(size);
+    let run = |demo: &mut Demo, ms: u64| {
+        for _ in 0..ms / 16 {
+            let t = demo.ui.now() + 16;
+            demo.frame(t);
+        }
+    };
+    let click = |demo: &mut Demo, w: WidgetId| {
+        let r = demo.ui.rect(w);
+        let p = demo.ui.to_root(w, Point::new(r.w / 2, r.h / 2));
+        demo.ui.pointer_down(p, 1, Modifiers::NONE);
+        demo.ui.pointer_up(p, Modifiers::NONE);
+    };
+    let top = |demo: &Demo| *demo.ui.children(root).last().unwrap();
+    run(&mut demo, 500);
+
+    // The text window's menu: a TrueType font, then the same with a glow.
+    let edit = demo.ui.find_as::<EditField>(root, tbid!("editfield")).expect("the text window's field");
+    let text_win = demo.ui.parent_window(edit).unwrap();
+    demo.ui.activate_window(text_win);
+    let segoe = demo.ui.calculated_font(edit);
+    let segoe_width = demo.ui.text_width(segoe, "Turbo Badger");
+    for (item_id, font, shot_name) in [
+        (tbid!("ttf font Vera"), tbid!("Vera"), "demo_m8_truetype.png"),
+        (tbid!("ttf font VeraGlow"), tbid!("VeraGlowText"), "demo_m8_truetype_glow.png"),
+    ] {
+        click_id(&mut demo, text_win, tbid!("menu"));
+        run(&mut demo, 300);
+        let menu = top(&demo);
+        let list = demo.ui.get::<MenuWindow>(menu).expect("the text window's menu").list().unwrap();
+        let index = {
+            let source = demo.ui.get::<SelectList>(list).unwrap().source().unwrap();
+            let source = source.borrow();
+            (0..source.num_items()).find(|&i| source.item_id(i) == item_id).expect("the menu item")
+        };
+        let item = demo.ui.get::<SelectList>(list).unwrap().item_widget(&demo.ui, index as i32).unwrap();
+        click(&mut demo, item);
+        run(&mut demo, 400);
+        assert!(!demo.ui.exists(menu));
+        let fd = demo.ui.calculated_font(edit);
+        assert_eq!(fd.id, font);
+        let face = demo.ui.fonts().face(fd);
+        assert_eq!(face.desc(), fd, "the TrueType face was created");
+        assert!(!face.is_box_font());
+        assert_ne!(demo.ui.text_width(fd, "Turbo Badger"), segoe_width, "another font, other widths");
+        shot(&mut demo, &mut soft, shot_name);
+    }
+    // The glow: a blurred face behind the text face.
+    let fd = demo.ui.calculated_font(edit);
+    let background = demo.ui.fonts().face(fd).background().expect("a background font");
+    assert_eq!(demo.ui.fonts().face(background.desc).effect().blur_radius(), 3);
+
+    // The image window: nine images from files, each loaded once.
+    assert!(demo.ui.images().is_empty());
+    click_id(&mut demo, main, tbid!("test-image"));
+    run(&mut demo, 400);
+    let image_win = top(&demo);
+    assert_eq!(demo.ui.text(image_win), Some("TBImageWidget"));
+    let images = |demo: &Demo| -> Vec<WidgetId> {
+        let mut found = Vec::new();
+        let mut stack = vec![image_win];
+        while let Some(w) = stack.pop() {
+            if demo.ui.get::<ImageWidget>(w).is_some() {
+                found.push(w);
+            }
+            stack.extend(demo.ui.children(w).iter().rev());
+        }
+        found
+    };
+    let widgets = images(&demo);
+    assert_eq!(widgets.len(), 9);
+    assert_eq!(demo.ui.images().len(), 9);
+    let first = demo.ui.get::<ImageWidget>(widgets[0]).unwrap().image().clone();
+    assert_eq!(first.size(), Size::new(256, 171));
+    assert_eq!(first.name(), "Demo/demo01/images/image_1.png");
+    drop(first);
+    shot(&mut demo, &mut soft, "demo_m8_images.png");
+    // The button on an image removes it, and the image is unloaded.
+    click_id(&mut demo, widgets[0], tbid!("remove"));
+    run(&mut demo, 100);
+    shot(&mut demo, &mut soft, "demo_m8_images_removed.png");
+    assert_eq!(images(&demo).len(), 8);
+    assert_eq!(demo.ui.images().len(), 8);
+    // Closing the window unloads the rest.
+    demo.ui.close_window(image_win);
+    run(&mut demo, 600);
+    shot(&mut demo, &mut soft, "demo_m8_images_closed.png");
+    assert!(!demo.ui.exists(image_win));
+    assert!(demo.ui.images().is_empty());
+
+    // The debug window.
+    click_id(&mut demo, main, tbid!("debug settings"));
+    run(&mut demo, 400);
+    let debug_win = top(&demo);
+    assert!(demo.ui.get::<DebugWindow>(debug_win).is_some());
+    assert_eq!(demo.ui.text(debug_win), Some("Debug settings"));
+    click_id(&mut demo, debug_win, tbid!("debug.layout_bounds"));
+    click_id(&mut demo, debug_win, tbid!("debug.font_bitmap_fragments"));
+    let s = demo.ui.debug_settings();
+    assert_eq!(s, DebugSettings { layout_bounds: true, font_bitmap_fragments: true, ..Default::default() });
+    // Something happens elsewhere: it shows in the event log.
+    demo.ui.activate_window(main);
+    click_id(&mut demo, main, tbid!("test-connections"));
+    run(&mut demo, 100);
+    let output = demo.ui.find(debug_win, tbid!("output")).unwrap();
+    let log = demo.ui.text(output).unwrap().to_string();
+    assert!(log.contains("CLICK (Button) id: \"test-connections\""), "{log}");
+    demo.ui.activate_window(debug_win);
+    run(&mut demo, 400);
+    shot(&mut demo, &mut soft, "demo_m8_debug.png");
+    click_id(&mut demo, debug_win, tbid!("debug.layout_bounds"));
+    click_id(&mut demo, debug_win, tbid!("debug.font_bitmap_fragments"));
+    click_id(&mut demo, debug_win, tbid!("debug.render_batches"));
+    run(&mut demo, 50);
+    shot(&mut demo, &mut soft, "demo_m8_debug_batches.png");
+    let stats = demo.ui.debug_frame_stats();
+    assert!(stats.batches > 0 && stats.triangles > 1000, "{stats:?}");
+}
