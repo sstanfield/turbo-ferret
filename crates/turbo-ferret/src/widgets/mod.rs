@@ -1,6 +1,7 @@
 //! Built-in widgets, one file each.
 
 pub mod button;
+pub mod edit_field;
 pub mod inline_select;
 pub mod layout;
 pub mod message_window;
@@ -16,6 +17,7 @@ pub mod toggle;
 pub mod window;
 
 pub use button::{Button, ClickLabel};
+pub use edit_field::{EditField, EditFieldScrollRoot, EditType};
 pub use inline_select::InlineSelect;
 pub use layout::Layout;
 pub use message_window::{MessageButtons, MessageSettings, MessageWindow};
@@ -116,6 +118,7 @@ pub(crate) fn register_builtins(ui: &mut Ui) {
         Factory::of::<SectionHeader>("SectionHeader").sync(ValueKind::Int),
     );
     register_both(ui, "TBSection", "Section", Factory::of::<Section>("Section").sync(ValueKind::Int));
+    register_both(ui, "TBEditField", "EditField", Factory::of::<EditField>("EditField").sync(ValueKind::Str));
     register_both(ui, "TBSelectList", "SelectList", Factory::of::<SelectList>("SelectList").sync(ValueKind::Int));
     register_both(
         ui,

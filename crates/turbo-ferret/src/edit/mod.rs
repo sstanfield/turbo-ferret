@@ -903,6 +903,8 @@ impl StyleEdit {
         }
         self.blocks.push(Block::empty(self.align));
         self.caret.pos = TextOfs::default();
+        // (TB kept the width of the widest removed block here.)
+        self.content_width = 0;
         self.layout_block(env, 0, true, true);
         self.place_caret(env, 0, 0, true, false);
         self.caret.wanted_x = self.caret.x;
@@ -916,10 +918,13 @@ impl StyleEdit {
 
     /// Replace the text. TB: SetText
     pub fn set_text(&mut self, env: &mut dyn EditEnv, text: &str, pos: CaretPos) {
+        let was_empty = self.is_empty();
         self.clear(env);
         if text.is_empty() {
             self.caret.wanted_x = self.caret.x;
             self.scroll_if_needed(true, true);
+            // (TB reported no change when text was replaced by nothing.)
+            self.effects.changed = !was_empty;
             return;
         }
         self.insert_in_block(env, 0, 0, text, true);

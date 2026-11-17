@@ -63,6 +63,16 @@ impl<'a, 'r> PaintCtx<'a, 'r> {
     pub fn padding_rect(&self) -> Rect {
         self.rect.shrink_edges(self.view.padding(self.id))
     }
+    /// True if this widget has the keyboard focus (whether or not the focus is shown).
+    pub fn is_focused(&self) -> bool {
+        self.view.input.focused == Some(self.id)
+    }
+
+    /// Width of `text` in a specific font.
+    pub fn text_width_with(&self, font: FontDesc, text: &str) -> i32 {
+        self.fonts.face(font).string_width(text)
+    }
+
     /// Text color from the skin element, else inherited.
     pub fn text_color(&self) -> Color {
         self.text_color

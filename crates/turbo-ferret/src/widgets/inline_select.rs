@@ -1,8 +1,5 @@
-//! `InlineSelect`: a number with two arrow buttons that step it.
+//! `InlineSelect`: a number in an edit field with two arrow buttons that step it.
 //! TB: tb_inline_select.cpp (TBInlineSelect)
-//!
-//! TB shows the number in an edit field. The edit field comes with a later milestone;
-//! until then the number is a text field (it cannot be typed into).
 
 use alloc::format;
 
@@ -15,7 +12,8 @@ use crate::ui::Ctx;
 use crate::value::Value;
 use crate::widget::{Axis, Widget};
 
-use super::text::TextField;
+use super::edit_field::{EditField, EditType};
+use super::text::TextAlign;
 use super::{Button, Layout, SkinImage};
 
 /// A select widget without a popup: two arrow buttons step a number between limits.
@@ -25,12 +23,12 @@ pub struct InlineSelect {
     min: i32,
     max: i32,
     layout: Option<WidgetId>,
-    text: Option<WidgetId>,
+    edit: Option<WidgetId>,
 }
 
 impl Default for InlineSelect {
     fn default() -> Self {
-        InlineSelect { value: 0, min: 0, max: 100, layout: None, text: None }
+        InlineSelect { value: 0, min: 0, max: 100, layout: None, edit: None }
     }
 }
 
@@ -54,8 +52,8 @@ impl InlineSelect {
             return;
         }
         self.value = value;
-        if let (true, Some(t)) = (update_text, self.text) {
-            cx.set_text(t, &format!("{value}"));
+        if let (true, Some(e)) = (update_text, self.edit) {
+            cx.set_text(e, &format!("{value}"));
         }
         cx.emit_changed(Value::Int(value));
     }
@@ -89,12 +87,17 @@ impl Widget for InlineSelect {
             b
         };
         let dec = step_button(cx, crate::tbid!("dec"), crate::tbid!("arrow.left"));
-        let text = cx.add(layout, TextField::new("0"));
-        cx.set_gravity(text, Gravity::ALL);
+        let edit = cx.add(layout, EditField::default());
+        cx.with_widget::<EditField, _>(edit, |e, cx| {
+            e.set_text_align(cx, TextAlign::Center);
+            e.set_edit_type(cx, EditType::Number);
+            e.set_text(cx, "0");
+        });
+        cx.set_gravity(edit, Gravity::ALL);
         let inc = step_button(cx, crate::tbid!("inc"), crate::tbid!("arrow.right"));
         let _ = (dec, inc);
         self.layout = Some(layout);
-        self.text = Some(text);
+        self.edit = Some(edit);
     }
 
     /// TB: TBInlineSelect::OnInflate
@@ -147,6 +150,13 @@ impl Widget for InlineSelect {
                 Some(id) if id == crate::tbid!("dec") => -1,
                 _ => return false,
             },
+            // The number was typed (the edit field is busy: its text comes with the
+            // event).
+            EventKind::Changed if Some(ev.target) == self.edit => {
+                let typed = ev.value.as_ref().map_or(0, |v| crate::value::atoi(&v.as_str()));
+                self.set_value_internal(cx, typed, false);
+                return false;
+            }
             _ => return false,
         };
         let v = self.value.saturating_add(step);

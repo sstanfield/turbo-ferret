@@ -1,27 +1,21 @@
 //! `MessageWindow`: a window with a message and buttons.
 //! TB: tb_message_window.cpp (TBMessageWindow, TBMessageWindowSettings)
 //!
-//! TB shows the message in a read-only edit field, which wraps and can style text.
-//! The edit field comes with a later milestone; until then the message is a small
-//! wrapped-text widget, and styling tags are dropped.
 
 use alloc::boxed::Box;
-use alloc::string::String;
-use alloc::vec::Vec;
 
 use crate::arena::WidgetId;
 use crate::event::{Event, EventKind, SpecialKey};
-use crate::geom::{Point, Rect};
+use crate::geom::Rect;
 use crate::id::TbId;
-use crate::layout::size::{Gravity, PreferredSize, SizeConstraints};
+use crate::layout::size::Gravity;
 use crate::layout::stack::{LayoutDistribution, LayoutDistributionPosition, LayoutSize};
-use crate::paint::PaintCtx;
 use crate::ui::{Ctx, ListenerId, NodeRef, Ui};
 use crate::widget::{Axis, DieAction, Widget, Z};
 
 use super::popup::TargetWatcher;
 use super::window::{ResizeFit, Window, forward_to_window};
-use super::{Button, Dimmer, Layout, SkinImage};
+use super::{Button, Dimmer, EditField, Layout, SkinImage};
 
 /// Which buttons a message window has. TB: TB_MSG
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
@@ -135,95 +129,6 @@ impl Widget for MessageWindow {
     forward_to_window!(window);
 }
 
-/// Drop `<...>` tags from styled text.
-fn strip_tags(text: &str) -> String {
-    let mut out = String::new();
-    let mut in_tag = false;
-    for c in text.chars() {
-        match c {
-            '<' => in_tag = true,
-            '>' if in_tag => in_tag = false,
-            _ if !in_tag => out.push(c),
-            _ => {}
-        }
-    }
-    out
-}
-
-/// Break `text` into lines no wider than `width`, at spaces and at line breaks.
-fn wrap(text: &str, width: i32, measure: &dyn Fn(&str) -> i32) -> Vec<String> {
-    let mut lines = Vec::new();
-    for para in text.split('\n') {
-        let mut line = String::new();
-        for word in para.split(' ') {
-            if line.is_empty() {
-                line.push_str(word);
-                continue;
-            }
-            let mut candidate = line.clone();
-            candidate.push(' ');
-            candidate.push_str(word);
-            if measure(&candidate) <= width {
-                line = candidate;
-            } else {
-                lines.push(core::mem::replace(&mut line, String::from(word)));
-            }
-        }
-        lines.push(line);
-    }
-    lines
-}
-
-/// The message text: wrapped to the widget's width, left aligned. Stands in for TB's
-/// read-only multi-line edit field.
-struct MessageText {
-    text: String,
-}
-
-impl MessageText {
-    /// TB: an edit field prefers 10 font heights of width and 5 of height.
-    const PREF_W: i32 = 10;
-    const MIN_LINES: i32 = 5;
-}
-
-impl Widget for MessageText {
-    fn type_name(&self) -> &'static str {
-        "MessageText"
-    }
-
-    fn measure_content(&mut self, cx: &mut Ctx, _sc: SizeConstraints) -> PreferredSize {
-        let font = cx.calculated_font(cx.this());
-        let fh = cx.font_height(font);
-        let w = fh * Self::PREF_W;
-        let lines = wrap(&self.text, w, &|s| cx.text_width(font, s)).len() as i32;
-        let mut ps = PreferredSize::default();
-        ps.pref.w = w;
-        ps.pref.h = fh * lines.max(Self::MIN_LINES);
-        ps.min.h = fh;
-        ps
-    }
-
-    fn paint(&self, p: &mut PaintCtx) {
-        let r = p.padding_rect();
-        let fh = p.font_height();
-        let color = p.text_color();
-        let lines = wrap(&self.text, r.w, &|s| p.text_width(s));
-        p.with_clip(r, |p| {
-            for (i, line) in lines.iter().enumerate() {
-                let y = r.y + i as i32 * fh;
-                if y >= r.bottom() {
-                    break;
-                }
-                p.draw_text(Point::new(r.x, y), color, line);
-            }
-        });
-    }
-
-    fn text(&self) -> Option<&str> {
-        Some(&self.text)
-    }
-}
-
 impl Ui {
     /// Show a message window for `target`, centered in the root. The answer comes as
     /// a `Click` event with `id` through `target` (see [`MessageWindow`]).
@@ -257,8 +162,14 @@ impl Ui {
         self.set_gravity(row, Gravity::ALL);
         let icon = self.add(row, SkinImage);
         self.set_skin(icon, settings.icon_skin);
-        let text = if settings.styling { strip_tags(message) } else { String::from(message) };
-        let text = self.add(row, MessageText { text });
+        let text = self.add(row, EditField::default());
+        self.with_widget::<EditField, _>(text, |e, cx| {
+            e.set_multiline(cx, true);
+            e.set_read_only(cx, true);
+            e.set_styling(cx, settings.styling);
+            e.set_text(cx, message);
+        });
+        self.set_skin(text, TbId::NONE);
         self.set_gravity(text, Gravity::ALL);
         let mut buttons = Layout::default();
         buttons.distribution_position = LayoutDistributionPosition::RightBottom;
@@ -285,10 +196,13 @@ impl Ui {
                 w.dimmer = Some(dimmer);
             }
         }
-        // Size to the content, centered in the root.
+        // Size to the content (the text field's default size), then grow by what
+        // the text overflows at that width, to show all of it.
         self.resize_to_fit_content(win, ResizeFit::Preferred);
+        let mut r = self.rect(win);
+        r.h += self.get::<EditField>(text).map_or(0, |e| e.overflow_y());
         let bounds = Rect::from_size(self.rect(root).size());
-        let r = self.rect(win).center_in(&bounds).move_in(&bounds).clip(&bounds);
+        let r = r.center_in(&bounds).move_in(&bounds).clip(&bounds);
         self.set_rect(win, r);
         self.attach(root, win, Z::Top);
         if let Some(b) = first {

@@ -56,7 +56,9 @@ pub use render::{BitmapId, Quad, Renderer};
 pub use res::{ParseError, RefTrees, ResNode};
 #[cfg(feature = "std")]
 pub use services::FsLoader;
-pub use services::{DecodeError, Image, ImageDecoder, LoadError, MemLoader, ResourceLoader, Services};
+pub use services::{
+    Clipboard, DecodeError, Image, ImageDecoder, LoadError, MemClipboard, MemLoader, ResourceLoader, Services,
+};
 pub use ui::{Config, Ctx, FocusReason, ListenerId, NodeFlags, NodeRef, ScrollSnap, ScrollerFunction, Ui, UiListener};
 pub use value::{Value, ValueKind};
 pub use widget::{Align, Axis, DieAction, HitStatus, ScrollInfo, Widget, WidgetState, Z, ZRel};

@@ -194,6 +194,40 @@ impl ImageDecoder for NoImages {
 }
 
 // ---------------------------------------------------------------------------
+// Clipboard
+// ---------------------------------------------------------------------------
+
+/// The text clipboard, used by edit fields. The default ([`MemClipboard`]) keeps the
+/// text in memory; a host with a system clipboard provides its own.
+/// TB: TBClipboard
+pub trait Clipboard {
+    fn set_text(&mut self, text: &str);
+    /// The text on the clipboard, if there is any.
+    fn text(&mut self) -> Option<String>;
+    /// TB: TBClipboard::HasText
+    fn has_text(&mut self) -> bool {
+        self.text().is_some_and(|t| !t.is_empty())
+    }
+    /// TB: TBClipboard::Empty
+    fn clear(&mut self) {
+        self.set_text("");
+    }
+}
+
+/// A clipboard that lives in this `Ui` only.
+#[derive(Default)]
+pub struct MemClipboard(String);
+
+impl Clipboard for MemClipboard {
+    fn set_text(&mut self, text: &str) {
+        self.0 = String::from(text);
+    }
+    fn text(&mut self) -> Option<String> {
+        (!self.0.is_empty()).then(|| self.0.clone())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Logging
 // ---------------------------------------------------------------------------
 
@@ -221,13 +255,19 @@ pub fn stderr_log(level: Level, args: fmt::Arguments<'_>) {
 pub struct Services {
     pub loader: Box<dyn ResourceLoader>,
     pub images: Box<dyn ImageDecoder>,
+    pub clipboard: Box<dyn Clipboard>,
     pub log: Option<LogSink>,
 }
 
 impl Services {
     /// Services with the given loader, the default image decoder (if any) and no log.
     pub fn with_loader(loader: impl ResourceLoader + 'static) -> Self {
-        Services { loader: Box::new(loader), images: default_decoder(), log: default_log() }
+        Services {
+            loader: Box::new(loader),
+            images: default_decoder(),
+            clipboard: Box::new(MemClipboard::default()),
+            log: default_log(),
+        }
     }
 
     pub(crate) fn log(&self, level: Level, args: fmt::Arguments<'_>) {

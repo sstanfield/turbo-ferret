@@ -618,7 +618,8 @@ fn inline_select_steps_between_limits() {
     ui.send(inc, EventKind::Click);
     ui.send(inc, EventKind::Click);
     assert_eq!((ui.value(s), shown(&ui)), (Value::Int(8), "8".to_string()), "clamped to the maximum");
-    let changes = log.borrow().iter().filter(|e| e.0 == EventKind::Changed).count();
+    // (Its edit field reports its own changes too.)
+    let changes = log.borrow().iter().filter(|e| e.0 == EventKind::Changed && e.1 == tbid!("num")).count();
     assert_eq!(changes, 2);
     ui.send(dec, EventKind::Click);
     assert_eq!(ui.value(s), Value::Int(7));

@@ -50,6 +50,21 @@ impl Ui {
         ok
     }
 
+    /// The text on the clipboard, if any. TB: TBClipboard::GetText
+    pub fn clipboard_text(&mut self) -> Option<alloc::string::String> {
+        self.services.clipboard.text()
+    }
+
+    /// TB: TBClipboard::SetText
+    pub fn set_clipboard_text(&mut self, text: &str) {
+        self.services.clipboard.set_text(text);
+    }
+
+    /// Ascent of a font (baseline from the top of a line).
+    pub fn font_ascent(&self, font: FontDesc) -> i32 {
+        self.fonts.face(font).ascent()
+    }
+
     /// Where the current press started, in the captured widget's coordinates.
     pub fn pointer_down_pos(&self) -> Point {
         self.input.down_pos
