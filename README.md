@@ -6,7 +6,7 @@ A small, host-driven UI toolkit for games. The host owns the loop, feeds input a
 
 | Crate | What |
 |---|---|
-| `crates/turbo-ferret` | The core: widget tree, layout, skin, fonts (TB bitmap fonts), resources, PNG decoder, widgets (basic ones, scrolling, containers, lists, menus and message windows). `no_std`. |
+| `crates/turbo-ferret` | The core: widget tree, layout, skin, fonts (TB bitmap fonts), resources, PNG decoder, widgets (basic ones, scrolling, containers, lists, menus, message windows, edit fields). `no_std`. |
 | `crates/turbo-ferret-soft` | Software renderer into an RGBA buffer (`no_std`, zero deps); used for golden-image tests. |
 | `crates/turbo-ferret-miniquad` | OpenGL/GLES/WebGL renderer and input adapter on miniquad. |
 | `demo` | Turbo Badger's demo01, ported (not published). |

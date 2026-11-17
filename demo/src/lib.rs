@@ -5,14 +5,15 @@
 //! is not endorsed by its author. The demo font is rasterized from a copyrighted
 //! font (see resources/default_font/license.txt); it is for the demo only.
 
+pub mod resource_edit;
 pub mod sources;
 
 use std::rc::Rc;
 
 use turbo_ferret::anim::{ALMOST_ZERO_OPACITY, AnimSpec, Curve};
 use turbo_ferret::widgets::{
-    Button, MessageButtons, MessageSettings, PopupAlignment, ResizeFit, ScrollContainer, ScrollMode, SelectDropdown,
-    SelectList, SkinImage, SourceRef, TabContainer, Window,
+    Button, EditField, MessageButtons, MessageSettings, PopupAlignment, ResizeFit, ScrollContainer, ScrollMode,
+    SelectDropdown, SelectList, SkinImage, SourceRef, StringItem, StringItemSource, TabContainer, TextAlign, Window,
 };
 use turbo_ferret::*;
 
@@ -58,6 +59,111 @@ impl Widget for MessageSink {
     }
 }
 
+/// Keeps the text window's undo and redo buttons and its caret info up to date.
+/// TB: EditWindow::OnProcessStates
+#[derive(Default)]
+struct EditWindowState;
+
+impl Widget for EditWindowState {
+    fn type_name(&self) -> &'static str {
+        "EditWindowState"
+    }
+    fn on_process(&mut self, cx: &mut Ctx) {
+        let Some(win) = cx.parent_window(cx.this()) else { return };
+        let Some(edit) = cx.find_as::<EditField>(win, tbid!("editfield")) else { return };
+        let Some((can_undo, can_redo, caret)) =
+            cx.get::<EditField>(edit).map(|e| (e.can_undo(), e.can_redo(), e.style_edit().caret_global_ofs()))
+        else {
+            return;
+        };
+        if let Some(b) = cx.find(win, tbid!("undo")) {
+            cx.set_state(b, WidgetState::DISABLED, !can_undo);
+        }
+        if let Some(b) = cx.find(win, tbid!("redo")) {
+            cx.set_state(b, WidgetState::DISABLED, !can_redo);
+        }
+        if let Some(info) = cx.find(win, tbid!("info")) {
+            let text = format!("Caret ofs: {caret}");
+            if cx.text(info) != Some(text.as_str()) {
+                cx.set_text(info, &text);
+            }
+        }
+    }
+}
+
+/// The text window's menu. TB: EditWindow::OnEvent ("menu")
+fn text_menu_source() -> SourceRef {
+    let source = StringItemSource::shared();
+    {
+        let mut s = source.borrow_mut();
+        for (text, id) in [
+            ("Default font", "default font"),
+            ("Default font (larger)", "large font"),
+            ("RGB font (Neon)", "rgb font Neon"),
+            ("RGB font (Orangutang)", "rgb font Orangutang"),
+            ("RGB font (Orange)", "rgb font Orange"),
+            ("-", ""),
+            ("Glyph cache stresstest (CJK)", "CJK"),
+            ("-", ""),
+            ("Toggle wrapping", "toggle wrapping"),
+            ("-", ""),
+            ("Align left", "align left"),
+            ("Align center", "align center"),
+            ("Align right", "align right"),
+        ] {
+            s.add(StringItem::with_id(text, TbId::new(id)));
+        }
+    }
+    source
+}
+
+/// A choice in the text window's menu. TB: EditWindow::OnEvent ("popup_menu")
+fn text_menu_choice(ui: &mut Ui, edit: WidgetId, choice: TbId) {
+    let with_font_id = |ui: &mut Ui, name: &str| {
+        let mut fd = ui.calculated_font(edit);
+        fd.id = TbId::new(name);
+        ui.set_font(edit, Some(fd));
+    };
+    if choice == tbid!("default font") {
+        ui.set_font(edit, None);
+    } else if choice == tbid!("large font") {
+        let mut fd = ui.default_font();
+        fd.size = ui.dimension_converter().dp_to_px(28).clamp(1, 255) as u16;
+        ui.set_font(edit, Some(fd));
+    } else if choice == tbid!("rgb font Neon") {
+        with_font_id(ui, "Neon");
+    } else if choice == tbid!("rgb font Orangutang") {
+        with_font_id(ui, "Orangutang");
+    } else if choice == tbid!("rgb font Orange") {
+        with_font_id(ui, "Orange");
+    } else if choice == tbid!("CJK") {
+        let mut text = String::new();
+        for (i, cp) in (0x4E00u32..=0x9FCC).enumerate() {
+            text.extend(char::from_u32(cp));
+            if i % 64 == 63 {
+                text.push('\n');
+            }
+        }
+        ui.set_text(edit, &text);
+    } else if choice == tbid!("toggle wrapping") {
+        ui.with_widget::<EditField, _>(edit, |e, cx| {
+            let wrap = !e.is_wrapping();
+            e.set_wrapping(cx, wrap);
+        });
+    } else {
+        let align = if choice == tbid!("align left") {
+            TextAlign::Left
+        } else if choice == tbid!("align center") {
+            TextAlign::Center
+        } else if choice == tbid!("align right") {
+            TextAlign::Right
+        } else {
+            return;
+        };
+        ui.with_widget::<EditField, _>(edit, |e, cx| e.set_text_align(cx, align));
+    }
+}
+
 /// A message window with an Ok button.
 fn message(ui: &mut Ui, target: WidgetId, id: TbId, title: &str, text: &str) {
     ui.show_message(target, id, title, text, &MessageSettings::default());
@@ -100,17 +206,28 @@ fn list_of_layout(ui: &Ui, layout: WidgetId) -> Option<WidgetId> {
 struct DemoListener {
     tab_axis: Axis,
     sources: Sources,
-    added: u32,
 }
 
 impl DemoListener {
     /// TB: AdvancedItemWidget::OnEvent and the busy check box
-    fn on_changed(&mut self, ui: &mut Ui, target: WidgetId, id: TbId, value: i32) -> bool {
+    fn on_changed(&mut self, ui: &mut Ui, target: WidgetId, id: TbId, value: &Value) -> bool {
+        let text = value.as_str();
+        let value = value.as_int();
         if id == tbid!("check") {
             if let Some((list, index)) = list_item_of(ui, target) {
                 self.sources.advanced.borrow_mut().set_checked(index, value != 0, Some(list));
             }
             return false;
+        }
+        if id == tbid!("filter") {
+            // TB: ListWindow::OnEvent and AdvancedListWindow::OnEvent
+            // (The edit field is busy sending this event: its text comes with it.)
+            let filter = text.into_owned();
+            let list = ui.parent_window(target).and_then(|w| ui.find_as::<SelectList>(w, tbid!("list")));
+            if let Some(list) = list {
+                ui.with_widget::<SelectList, _>(list, |l, cx| l.set_filter(cx, &filter));
+            }
+            return true;
         }
         if id == tbid!("busymsg") {
             let root = ui.root();
@@ -138,8 +255,8 @@ impl UiListener for DemoListener {
         let Some(n) = ui.node(target) else { return false };
         let id = n.id();
         if ev.kind == EventKind::Changed {
-            let value = ev.value.as_ref().map_or(0, |v| v.as_int());
-            return self.on_changed(ui, target, id, value);
+            let value = ev.value.clone().unwrap_or(Value::Null);
+            return self.on_changed(ui, target, id, &value);
         }
         if ev.kind != EventKind::Click {
             return false;
@@ -167,6 +284,8 @@ impl UiListener for DemoListener {
             open_advanced_list_window(ui, &self.sources);
         } else if id == tbid!("test-page") {
             open_page_window(ui);
+        } else if id == tbid!("test-resource-edit") {
+            resource_edit::open_resource_edit_window(ui, &res("resource_edit_test.tb.txt"));
         } else if id == tbid!("TBWindow.close") && win.is_some_and(|w| ui.find(w, tbid!("msg-sink")).is_some()) {
             // The main window asks before it closes (the click does not reach the
             // window, so it stays open).
@@ -201,6 +320,26 @@ impl UiListener for DemoListener {
             }
         } else if id == tbid!("debug settings") {
             message(ui, target, TbId::NONE, "Debug settings", "The debug overlay comes with a later milestone.");
+        // == Text window ==
+        } else if id == tbid!("clear") || id == tbid!("undo") || id == tbid!("redo") {
+            if let Some(edit) = win.and_then(|w| ui.find_as::<EditField>(w, tbid!("editfield"))) {
+                if id == tbid!("clear") {
+                    ui.set_text(edit, "");
+                } else {
+                    ui.with_widget::<EditField, _>(edit, |e, cx| e.command(cx, id));
+                }
+            }
+        } else if id == tbid!("menu") {
+            ui.show_menu(target, tbid!("popup_menu"), text_menu_source(), &PopupAlignment::default(), -1);
+        } else if id == tbid!("popup_menu") {
+            // The menu's target is the menu button, in the text window.
+            let edit = ui
+                .popup_target(target)
+                .and_then(|b| ui.parent_window(b))
+                .and_then(|w| ui.find_as::<EditField>(w, tbid!("editfield")));
+            if let Some(edit) = edit {
+                text_menu_choice(ui, edit, ev.ref_id);
+            }
         // == Animations window ==
         } else if id == tbid!("Animate!") {
             if let Some(w) = win {
@@ -246,11 +385,10 @@ impl UiListener for DemoListener {
                 self.sources.advanced.borrow_mut().remove(index);
             }
         } else if id == tbid!("add") {
-            // TB takes the name from an edit field, which comes with a later milestone.
             let name = win.and_then(|w| ui.text_by_name(w, tbid!("add_name"))).unwrap_or("").to_string();
-            self.added += 1;
-            let name = if name.is_empty() { format!("New name {}", self.added) } else { name };
-            self.sources.advanced.borrow_mut().add(&name, tbid!("boy_item"), true);
+            if !name.is_empty() {
+                self.sources.advanced.borrow_mut().add(&name, tbid!("boy_item"), true);
+            }
         } else if id == tbid!("delete all") {
             self.sources.advanced.borrow_mut().clear();
         // == Tab container window ==
@@ -286,6 +424,14 @@ impl UiListener for DemoListener {
         }
         true
     }
+}
+
+/// Styled, editable text with undo, fonts and alignment. TB: EditWindow
+pub fn open_text_window(ui: &mut Ui) -> Option<WidgetId> {
+    let w = open_resource_window(ui, "demo01/ui_resources/test_textwindow.tb.txt")?;
+    let state = ui.add(w, EditWindowState);
+    ui.set_visibility(state, Visibility::Gone);
+    Some(w)
 }
 
 /// A list of names with a filter field. TB: ListWindow
@@ -432,10 +578,11 @@ impl Demo {
         let root = ui.root();
         ui.set_skin(root, tbid!("background"));
         let sources = Sources::new();
-        ui.add_listener(Box::new(DemoListener { tab_axis: Axis::X, sources: sources.clone(), added: 0 }));
+        ui.add_listener(Box::new(DemoListener { tab_axis: Axis::X, sources: sources.clone() }));
         ui.create_bound_value(tbid!("continous-repaint"), ValueKind::Int);
         let main = open_main_window(&mut ui);
         // TB's demo starts with these windows open too.
+        open_text_window(&mut ui);
         open_list_window(&mut ui, &sources);
         open_advanced_list_window(&mut ui, &sources);
         open_resource_window(&mut ui, "demo01/ui_resources/test_tabcontainer01.tb.txt");

@@ -1,6 +1,6 @@
 # Turbo Ferret (Rust port of Turbo Badger): Decisions and Status
 
-*Hand-off notes so that work can resume without re-asking. Last updated 2026-11-17 (M0 to M6 implemented). This file is the record.*
+*Hand-off notes so that work can resume without re-asking. Last updated 2026-11-17 (M0 to M7 implemented). This file is the record.*
 
 ## Where things stand
 
@@ -10,7 +10,7 @@
 | 2. Assess ECS-style widget storage | Done, agreed | [ecs-widget-storage-assessment.md](ecs-widget-storage-assessment.md): verdict, option C, `no_std` costs, questions `M-01` to `M-08` |
 | 3. Mutability design | Done, agreed (five decisions below) | This file, section "Mutability" |
 | 4. Full port design | Done, accepted by Steve 2026-11-17 | [port-design.md](port-design.md): crates, core types, traits, event/layout/paint flow, milestones M0 to M8 |
-| 5. Implementation with Claude Code | M0 to M6 done 2026-11-17 (see "Implementation status" below). Next: M7 | Workspace in the repo root |
+| 5. Implementation with Claude Code | M0 to M7 done 2026-11-17 (see "Implementation status" below). Next: M8 | Workspace in the repo root |
 
 **Original project:** Turbo Badger by Emil Segerås, zlib licence (copyright 2011 to 2014, see `src/tb/tb_core.h`). The port must credit it and ship its notice: see port-design.md section 0.
 
@@ -54,6 +54,7 @@ Nothing blocking. Implementation notes and the deviations made while implementin
 | M4 Basic widgets, animation, demo | Done: `cargo run -p turbo-ferret-demo` (ran on macOS, GL, 2560x1600 at 192 dpi) | `widgets/` (TextField, Button, ClickLabel, SkinImage, Separator, ProgressSpinner, CheckBox, RadioButton, ScrollBar, Slider, Container, Layout, Mover, Resizer, Dimmer, Window), `anim.rs`, `demo/` |
 | M5 Scrolling and containers | Done | `ui/scroller.rs` (kinetic and smooth scrolling stepped by `update`, pan tracking, snap), panning in `ui/input.rs`, `widgets/scroll_container.rs`, `widgets/tab_container.rs`, `widgets/toggle.rs` (ToggleContainer, SectionHeader, Section), the overflow fade-out in `widgets/layout.rs`. `tests/m5_scroll.rs`, `tests/m5_containers.rs`, goldens `scroll_container`, `tab_container`, `sections`, `layout_fadeout`. The demo uses TB's own main window and has the scroll container, page (snap), toggle and tab windows |
 | M6 Lists and popups | Done | `widgets/select_item.rs` (`SelectItemSource`, `StringItemSource`, default item widgets), `widgets/select.rs` (SelectList, SelectDropdown), `widgets/popup.rs` (PopupAlignment, PopupWindow, MenuWindow), `widgets/message_window.rs`, `widgets/inline_select.rs`. `tests/m6_lists.rs`, goldens `select_list`, `dropdown_menu`, `message_window`. The demo has TB's list and customized-list windows, the dropdowns, the popup menu with sub menus and the message windows |
+| M7 Text editing | Done | `edit/` (`StyleEdit`: blocks and fragments as `Vec`s, layout and wrapping, caret, selection, undo/redo, styled content), `widgets/edit_field.rs` (EditField with scroll bars, placeholder, password, context menu, embedded widgets), `Clipboard` service with `MemClipboard`, `MiniquadClipboard` for the demo. `tests/m7_style_edit.rs` (TB's `test_tb_style_edit` ported, plus more), `tests/m7_edit_field.rs`, golden `edit_fields`. The message window and the inline select use the edit field. The demo has TB's text window, working list filters and the resource editor |
 
 ### Deviations from port-design.md made during implementation
 
@@ -74,7 +75,7 @@ Each keeps TB's behaviour or fixes a problem found while porting; none adds a de
 13. **Busy semantics, as designed, with these visible effects:** a widget's own `on_event` is not called for events it emits from its own hooks; a widget that removes itself from its own hook gets no `on_removed`; a parent that adds or removes children from its own hook gets no `on_child_added`/`on_child_removed`.
 14. *(Gone with M5: the demo main window is TB's `test_ui.tb.txt`.)* 
 
-Added with M5 (15 to 22) and M6 (23 to 31):
+Added with M5 (15 to 22), M6 (23 to 31) and M7 (32 to 38):
 
 15. **`Changed` events always carry the new value in `ev.value`** (the design kept it only for widgets with a value connection). Handlers up the chain need it: they cannot read the value back from the sender, which is busy while it fires the event. A scroll container gets its scroll bar's position this way, and a section its header's state.
 16. **A busy widget still answers the queries others depend on.** While a hook runs, `scroll_info`, `child_translation` and `scroll_root` are answered from a copy taken when the hook started (side table `busy_scroll`, filled only for scrollable widgets), and `axis` and `align` from the node (refreshed when the behaviour is put back, like `extra_padding`). Without this, a container that inflates or measures children from its own hook gave them the wrong skin (conditions such as `ancestors align` and `parent axis` saw defaults) and a scroll started from the widget's own key handler jumped. `Ctx::publish(self)` refreshes the copies in the middle of a hook. Still not covered: skin conditions on the `value` or a custom property of a busy widget see the default until its hook returns.
@@ -92,13 +93,26 @@ Added with M5 (15 to 22) and M6 (23 to 31):
 28. **Popup, menu and message windows hold a `Window` and forward to it** (`forward_to_window!`), where TB subclassed TBWindow. Their listener side is a small `TargetWatcher` registered as a global listener and removed in `on_removed`. They are shown with `ui.show_popup`, `ui.show_menu` (or `create_menu` + `show_menu_window` to change the skin first) and `ui.show_message`.
 29. **A press that hits no widget is reported to global listeners** as a `PointerDown` at the root, so popups close on a press on the bare root too. TB sent no event in that case and left them open.
 30. **Lists and dropdowns inflated without `value` select their first item**, as TB's generic `OnInflate` set the value to 0 when none was given. (The port still applies `value` only when it is present; for every other widget 0 is the default anyway.) A menu's initial selection is set without a `Changed` event; TB sent one through the menu's target.
-31. **Stand-ins until the edit field exists (M7):** a message window shows its text in a small wrapped-text widget and drops styling tags; `InlineSelect` shows its number in a text field, so it cannot be typed into and takes no keyboard focus; in the demo the list filter fields and the "add name" field are missing (`SelectList::set_filter` works, and "Add" adds a generated name).
+31. *(Gone with M7: the message window's text and the inline select's number are edit fields, and the demo's filter and name fields work.)*
+32. **`StyleEdit` reports effects instead of calling a listener.** TB's style edit called its edit field back in the middle of operations (invalidate, scroll, update scroll bars, caret blink, change). Here it only asks an `EditEnv` for font metrics and embedded content, and collects what its owner must do in `Effects` (`take_effects`); `EditField::with_edit` lends the environment and applies the effects afterwards. Painting is read-only: fragments keep their width, height and baseline from the last layout (TB measured lazily, also while painting), and style changes use a stack local to the paint call.
+33. **Positions are indices.** A text position is a block index and a byte offset (`TextOfs`), always on a character boundary; blocks and fragments are `Vec`s. Text is a Rust `String`, so TB's malformed-UTF-8 test has no counterpart (the port tests characters whose encoding ends in 0x8A instead).
+34. **The clipboard is the edit field's business, not the style edit's:** `copy` and `cut` return the text and `paste` takes it. The service is `Services::clipboard` (`Clipboard` trait, in-memory by default); the miniquad crate has `MiniquadClipboard` for the system clipboard.
+35. **Small behaviour changes from TB's style edit:**
+    - `cut` without a selection does nothing (TB deleted the next character);
+    - replacing text by nothing reports a change, and `clear` resets the content width (TB did neither, so a field that adapts to its content did not shrink);
+    - after inserting into a single-line field the caret stays behind what was inserted, when the text had a line break that was cut off (TB moved it by the full length);
+    - a content tag may contain non-ASCII characters;
+    - fragment widths are measured once per layout pass (TB kept its cache across passes, with stale tab and line widths after a resize);
+    - keys with Cmd (`SUPER`), like keys with Ctrl, and control characters are not typed.
+36. **Not ported:** `TBSyntaxHighlighter` (nothing in TB or its demo uses it) and the click callback of embedded content (no built-in content had one; embedded widgets take their own input).
+37. **`EditField::text()` builds the whole text on demand** and keeps it until the next change (a `OnceCell`), because the generic `text()` returns a borrowed `&str`. Every `Changed` event carries the text (deviation 15), so a change costs one copy of the text.
+38. **The scroll root clips only when it has children** (it counts them in `on_child_added`/`on_child_removed`), as TB skipped the clip to keep batches together.
 
 ### Dependencies
 
 - Core: none. Dev-only: `png` (oracle for the PNG decoder tests, and writing golden images).
 - `turbo-ferret-soft`: `turbo-ferret` only.
-- `turbo-ferret-miniquad`: `miniquad 0.4.11` (decision 9; it only pulls platform system crates: libc, objc-rs, malloc_buf, ndk-sys, winapi). Dev-only: `turbo-ferret-soft`, which the painter example's `--check` mode uses as the reference image (GL output matches it within 1 per channel).
+- `turbo-ferret-miniquad`: `miniquad 0.4.11` (also for `MiniquadClipboard`) (decision 9; it only pulls platform system crates: libc, objc-rs, malloc_buf, ndk-sys, winapi). Dev-only: `turbo-ferret-soft`, which the painter example's `--check` mode uses as the reference image (GL output matches it within 1 per channel).
 - `demo` (not published): the three crates plus `miniquad`; dev-only `png` for the headless screenshots.
 
 

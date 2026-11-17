@@ -490,9 +490,8 @@ impl StyleEdit {
         }
         // The content width can only be kept up to date in constant time when it
         // grows. If the widest block shrinks, it is recalculated when asked for.
-        if !self.wrapping && !self.multiline {
-            self.content_width = new_w;
-        } else if new_w > self.content_width {
+        let single_line = !self.wrapping && !self.multiline;
+        if single_line || new_w > self.content_width {
             self.content_width = new_w;
         } else if new_w < old_w && old_w == self.content_width {
             self.calculate_content_width_needed = true;
@@ -746,7 +745,8 @@ impl StyleEdit {
         let text = &self.blocks[pos.block].text;
         let (b, len) = (text.as_bytes(), text.len());
         let at = |i: usize| b.get(i).copied().unwrap_or(b'\n');
-        if word && !(forward && pos.ofs == len) && !(!forward && pos.ofs == 0) {
+        let at_end = if forward { pos.ofs == len } else { pos.ofs == 0 };
+        if word && !at_end {
             if forward {
                 if is_linebreak(at(pos.ofs)) {
                     pos.ofs += 1;

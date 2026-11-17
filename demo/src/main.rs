@@ -12,7 +12,7 @@ use miniquad::conf::Conf;
 use miniquad::{EventHandler, KeyCode, KeyMods, MouseButton, PassAction, TouchPhase, conf, window};
 use turbo_ferret::geom::Size;
 use turbo_ferret_demo::{Demo, default_resource_root};
-use turbo_ferret_miniquad::{InputAdapter, MiniquadRenderer, window_dpi};
+use turbo_ferret_miniquad::{InputAdapter, MiniquadClipboard, MiniquadRenderer, window_dpi};
 
 struct Stage {
     demo: Demo,
@@ -27,7 +27,9 @@ impl Stage {
     fn new(max_frames: Option<u64>) -> Stage {
         let renderer = MiniquadRenderer::new(window::new_rendering_backend()).expect("shader compiles");
         let (w, h) = window::screen_size();
-        let demo = Demo::new(&default_resource_root(), Size::new(w as i32, h as i32), window_dpi());
+        let mut demo = Demo::new(&default_resource_root(), Size::new(w as i32, h as i32), window_dpi());
+        // Copy and paste with the rest of the system.
+        demo.ui.services_mut().clipboard = Box::new(MiniquadClipboard);
         Stage { demo, renderer, input: InputAdapter::new(), start: Instant::now(), frames: 0, max_frames }
     }
 

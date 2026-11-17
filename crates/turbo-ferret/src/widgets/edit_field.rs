@@ -403,7 +403,7 @@ impl EditField {
     }
 
     /// Show tags in the text as styles and embedded content (see
-    /// [`Content`](crate::edit::Content)). TB: SetStyling
+    /// [`Content`]). TB: SetStyling
     pub fn set_styling(&mut self, cx: &mut Ctx, styling: bool) {
         if styling != self.edit.is_styling() {
             self.edit.set_styling(styling);
