@@ -1,0 +1,16 @@
+[package]
+name = "turbo-ferret-ttf"
+description = "TrueType font backend for Turbo Ferret (a Rust port of Turbo Badger): parser and anti-aliased rasterizer. no_std, no dependencies beyond turbo-ferret."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "LICENSE", "NOTICE"]
+
+[dependencies]
+turbo-ferret = { path = "../turbo-ferret", default-features = false }
+
+[dev-dependencies]
+turbo-ferret = { path = "../turbo-ferret" }
+# The reference the rasterizer is compared against in tests. Not used by the crate.
+fontdue = "=0.9.3"

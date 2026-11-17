@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/turbo-ferret", "crates/turbo-ferret-soft", "crates/turbo-ferret-miniquad", "demo"]
+members = ["crates/turbo-ferret", "crates/turbo-ferret-soft", "crates/turbo-ferret-miniquad", "crates/turbo-ferret-ttf", "demo"]
 exclude = ["crates/turbo-ferret/fuzz"]
 
 [workspace.package]
