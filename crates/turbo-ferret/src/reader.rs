@@ -242,6 +242,21 @@ impl Ui {
 
     /// TB: TBWidget::OnInflate (generic properties).
     fn apply_generic(&mut self, doc: &Doc, w: WidgetId, node: &ResNode, sync: ValueKind) {
+        #[cfg(feature = "debug")]
+        {
+            // Remember what the ids were called, for the debug window.
+            let lk = self.lookup(doc);
+            let names: Vec<alloc::string::String> = ["id", "group-id", "skin"]
+                .iter()
+                .filter_map(|key| match lk.value(node, key) {
+                    Some(Value::Str(s)) => Some(alloc::string::String::from(&**s)),
+                    _ => None,
+                })
+                .collect();
+            for name in names {
+                self.name_id(&name);
+            }
+        }
         let lk = self.lookup(doc);
         let id = lk.value(node, "id").map(id_from_value);
         let group = lk.value(node, "group-id").map(id_from_value);

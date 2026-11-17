@@ -122,6 +122,8 @@ pub struct Ui {
     pub(crate) anims: crate::anim::Animations,
     pub(crate) fonts: crate::font::FontManager,
     pub(crate) images: crate::images::ImageManager,
+    #[cfg(feature = "debug")]
+    pub(crate) debug: crate::debug::DebugState,
 }
 
 impl Ui {
@@ -153,6 +155,8 @@ impl Ui {
             anims: Default::default(),
             fonts: crate::font::FontManager::new(),
             images: crate::images::ImageManager::new(),
+            #[cfg(feature = "debug")]
+            debug: Default::default(),
         };
         crate::widgets::register_builtins(&mut ui);
         ui
@@ -225,6 +229,42 @@ impl Ui {
 
     pub(crate) fn log(&self, level: Level, args: fmt::Arguments<'_>) {
         self.services.log(level, args);
+    }
+
+    /// The id of a name, like `TbId::new`. With the `debug` feature the name is also
+    /// remembered, so the debug window's event log can show it (see
+    /// [`id_name`](Self::id_name)), and a warning is logged if two different names
+    /// give the same id. Ids read from resources are remembered without this.
+    /// TB: TBID::Set (debug_string, and the collision check in tb_id.cpp)
+    pub fn name_id(&mut self, name: &str) -> TbId {
+        let id = TbId::new(name);
+        #[cfg(feature = "debug")]
+        if id.is_some() {
+            match self.debug.id_names.get(&id) {
+                Some(known) if known != name => {
+                    self.warn(format_args!("id collision: {known:?} and {name:?} are both {}", id.0));
+                }
+                Some(_) => {}
+                None => {
+                    self.debug.id_names.insert(id, alloc::string::String::from(name));
+                }
+            }
+        }
+        id
+    }
+
+    /// The name an id was made from, if it is known: only with the `debug` feature,
+    /// and only for ids that came from resources or [`name_id`](Self::name_id).
+    pub fn id_name(&self, id: TbId) -> Option<&str> {
+        #[cfg(feature = "debug")]
+        {
+            self.debug.id_names.get(&id).map(|s| s.as_str())
+        }
+        #[cfg(not(feature = "debug"))]
+        {
+            let _ = id;
+            None
+        }
     }
 
     pub(crate) fn warn(&self, args: fmt::Arguments<'_>) {

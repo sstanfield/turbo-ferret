@@ -29,6 +29,13 @@ pub struct Painter<'r> {
     /// Bitmap and clip of the pending quads (meaningful while `quads` is not empty).
     batch_bitmap: Option<BitmapId>,
     batch_clip: Rect,
+    /// Tint each batch and count them (feature `debug`). TB: RENDER_BATCHES
+    #[cfg(feature = "debug")]
+    debug_batches: bool,
+    #[cfg(feature = "debug")]
+    batches: u32,
+    #[cfg(feature = "debug")]
+    triangles: u32,
 }
 
 impl<'r> Painter<'r> {
@@ -45,7 +52,26 @@ impl<'r> Painter<'r> {
             quads: Vec::with_capacity(BATCH_CAPACITY),
             batch_bitmap: None,
             batch_clip: viewport,
+            #[cfg(feature = "debug")]
+            debug_batches: false,
+            #[cfg(feature = "debug")]
+            batches: 0,
+            #[cfg(feature = "debug")]
+            triangles: 0,
         }
+    }
+
+    /// Draw every batch a second time in a color of its own, to show which quads
+    /// are drawn together, and count batches and triangles. TB: RENDER_BATCHES
+    #[cfg(feature = "debug")]
+    pub fn set_debug_batches(&mut self, on: bool) {
+        self.debug_batches = on;
+    }
+
+    /// Batches and triangles drawn so far while `set_debug_batches` was on.
+    #[cfg(feature = "debug")]
+    pub fn debug_stats(&self) -> (u32, u32) {
+        (self.batches, self.triangles)
     }
 
     /// Flush and end the frame. TB: TBRendererBatcher::EndPaint
@@ -128,6 +154,21 @@ impl<'r> Painter<'r> {
     pub fn flush(&mut self) {
         if !self.quads.is_empty() {
             self.r.draw(self.batch_bitmap, self.batch_clip, &self.quads);
+            #[cfg(feature = "debug")]
+            if self.debug_batches {
+                // Draw the quads again using a color based on the batch number.
+                // TB: TBRendererBatcher::Batch::Flush
+                let id = self.batches;
+                let hash = id.wrapping_mul(2_166_136_261 ^ id);
+                let [r, g, b, _] = hash.to_le_bytes();
+                let color = Color::rgba(r, g, b, 0xAA).premultiplied();
+                for q in &mut self.quads {
+                    q.color = color;
+                }
+                self.r.draw(None, self.batch_clip, &self.quads);
+                self.batches += 1;
+                self.triangles += self.quads.len() as u32 * 2;
+            }
             self.quads.clear();
         }
     }

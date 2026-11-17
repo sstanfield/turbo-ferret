@@ -327,7 +327,10 @@ impl Widget for MenuWindow {
 impl Ui {
     /// The target of a popup or menu window.
     pub fn popup_target(&self, popup: WidgetId) -> Option<WidgetId> {
-        self.get::<PopupWindow>(popup).map(|p| p.target()).or_else(|| self.get::<MenuWindow>(popup).map(|m| m.target()))
+        // A menu is in the middle of a hook when it reports a choice, and cannot be
+        // asked then. Its events go to its target, and the tree keeps that answer.
+        let name = self.node(popup)?.type_name();
+        if name == "PopupWindow" || name == "MenuWindow" { self.event_destination(popup) } else { None }
     }
 
     /// Size, place and show a popup or menu window made with `create`. Returns false

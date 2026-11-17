@@ -710,3 +710,39 @@ fn custom_source_and_item_widgets() {
     assert_eq!(ui.children(layout).len(), 2, "the header and the one open task");
     assert_eq!(ui.text(ui.children(layout)[0]), Some("Showing 1 of 3"));
 }
+
+/// A listener that hears a menu's choice can ask which widget the menu belongs to,
+/// although the menu is in the middle of sending the event.
+#[test]
+fn a_menus_target_is_known_while_it_reports_a_choice() {
+    struct Asks(Rc<RefCell<Vec<Option<WidgetId>>>>);
+    impl UiListener for Asks {
+        fn on_event(&mut self, ui: &mut Ui, target: WidgetId, ev: &Event) -> bool {
+            if ev.kind == EventKind::Click && ui.node(target).is_some_and(|n| n.id() == tbid!("popupmenu")) {
+                self.0.borrow_mut().push(ui.popup_target(target));
+            }
+            false
+        }
+    }
+    let mut ui = ui();
+    let root = ui.root();
+    let b = ui.add(root, Button::new("menu"));
+    ui.set_rect(b, Rect::new(10, 10, 80, 20));
+    let asked = Rc::new(RefCell::new(Vec::new()));
+    ui.add_listener(Box::new(Asks(asked.clone())));
+
+    let source: SourceRef = names();
+    let menu = ui.show_menu(b, tbid!("popupmenu"), source, &PopupAlignment::default(), -1).unwrap();
+    assert_eq!(ui.popup_target(menu), Some(b));
+    assert_eq!(ui.popup_target(b), None, "not a popup");
+    let list = ui.get::<MenuWindow>(menu).unwrap().list().unwrap();
+    let layout = ui.get::<SelectList>(list).unwrap().item_layout().unwrap();
+    for c in ui.children(layout).to_vec() {
+        ui.set_layout_params(c, Some(LayoutParams::fixed(100, 20)));
+    }
+    ui.resize_to_preferred(menu);
+    ui.update();
+    let first = item(&ui, list, 0);
+    click(&mut ui, first);
+    assert_eq!(*asked.borrow(), [Some(b)]);
+}

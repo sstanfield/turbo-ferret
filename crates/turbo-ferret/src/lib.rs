@@ -19,6 +19,8 @@ extern crate std;
 
 pub mod anim;
 pub mod arena;
+#[cfg(feature = "debug")]
+pub mod debug;
 pub mod edit;
 pub mod event;
 mod flags;

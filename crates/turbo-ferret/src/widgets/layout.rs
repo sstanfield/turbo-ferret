@@ -160,6 +160,11 @@ impl Widget for Layout {
 
     /// TB: TBLayout::OnResized / OnProcess (ValidateLayout)
     fn arrange(&mut self, cx: &mut Ctx, _old: crate::geom::Size, _new: crate::geom::Size) {
+        #[cfg(feature = "debug")]
+        {
+            let me = cx.this();
+            cx.debug_mark_arranged(me);
+        }
         let s = self.settings(cx);
         self.overflow_amount = stack::arrange(cx, &s);
         let v = self.overflow_scroll;

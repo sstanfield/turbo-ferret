@@ -32,6 +32,8 @@ pub struct PaintCtx<'a, 'r> {
     pub(crate) repaint: &'a mut bool,
     pub(crate) fonts: &'a mut FontManager,
     pub(crate) images: &'a ImageManager,
+    #[cfg(feature = "debug")]
+    pub(crate) debug: &'a crate::debug::DebugState,
 }
 
 impl<'a, 'r> PaintCtx<'a, 'r> {
@@ -134,7 +136,6 @@ impl<'a, 'r> PaintCtx<'a, 'r> {
         self.painter.draw_bitmap(dst, src, bitmap, color);
     }
 
-    /// Run `f` with drawing clipped to `rect` (local); the clip is restored after.
     /// Draw an image of the image manager, stretched to `dst`. Nothing is drawn for
     /// an empty handle. TB: TBImageWidget::OnPaint (g_renderer->DrawBitmap with a fragment)
     pub fn draw_image(&mut self, dst: Rect, image: &ImageHandle) {
@@ -149,6 +150,7 @@ impl<'a, 'r> PaintCtx<'a, 'r> {
         self.images
     }
 
+    /// Run `f` with drawing clipped to `rect` (local); the clip is restored after.
     pub fn with_clip(&mut self, rect: Rect, f: impl FnOnce(&mut PaintCtx<'a, 'r>)) {
         let screen = rect.offset_by(self.painter.translation());
         let old = self.painter.clip();
@@ -234,13 +236,40 @@ impl Ui {
         skin.atlas.upload_all(renderer);
         images.begin_frame(renderer);
         let mut painter = Painter::new(renderer, vp);
+        #[cfg(feature = "debug")]
+        painter.set_debug_batches(self.debug.settings.render_batches);
         let view = View { tree, input, skin };
         let st =
             PaintState { offset: Point::ZERO, opacity: 1.0, text_color: skin.defaults.text_color, font: *default_font };
-        let mut frame = Frame { fonts, images, now, again: false };
+        let mut frame = Frame {
+            fonts,
+            images,
+            now,
+            again: false,
+            #[cfg(feature = "debug")]
+            debug: &self.debug,
+        };
         paint_node(&view, &mut frame, &mut painter, root, st);
+        let again = frame.again;
+        #[cfg(feature = "debug")]
+        {
+            painter.flush();
+            let (batches, triangles) = painter.debug_stats();
+            let stats = crate::debug::FrameStats { batches, triangles };
+            painter.finish();
+            // TB: TBRendererBatcher::EndPaint (it printed this every frame)
+            if stats != self.debug.frame && self.debug.settings.render_batches {
+                self.services.log(
+                    crate::services::Level::Info,
+                    format_args!("Frame rendered using {batches} batches and a total of {triangles} triangles."),
+                );
+            }
+            self.debug.frame = stats;
+            self.debug.prune(now);
+        }
+        #[cfg(not(feature = "debug"))]
         painter.finish();
-        *repaint = frame.again;
+        *repaint = again;
     }
 }
 
@@ -251,6 +280,8 @@ struct Frame<'a> {
     now: Millis,
     /// A widget asked for another frame.
     again: bool,
+    #[cfg(feature = "debug")]
+    debug: &'a crate::debug::DebugState,
 }
 
 fn paint_node(v: &View<'_>, f: &mut Frame<'_>, p: &mut Painter, id: WidgetId, st: PaintState) {
@@ -270,6 +301,11 @@ fn paint_node(v: &View<'_>, f: &mut Frame<'_>, p: &mut Painter, id: WidgetId, st
     p.set_opacity(opacity);
     let local = Rect::from_size(r.size());
     let used = elem.and_then(|e| v.skin.paint_skin(p, local, e.id, state, v, id, 0));
+    #[cfg(feature = "debug")]
+    if f.debug.settings.layout_bounds {
+        // TB: TBWidget::InvokePaint (LAYOUT_BOUNDS)
+        p.draw_rect(local, Color::rgba(255, 255, 255, 50));
+    }
     let used_e = used.and_then(|u| v.skin.element(u));
     let text_color = used_e.and_then(|e| e.text_color).unwrap_or(st.text_color);
     let font = n.font().unwrap_or(st.font);
@@ -288,6 +324,8 @@ fn paint_node(v: &View<'_>, f: &mut Frame<'_>, p: &mut Painter, id: WidgetId, st
             repaint: &mut f.again,
             fonts: &mut *f.fonts,
             images: f.images,
+            #[cfg(feature = "debug")]
+            debug: f.debug,
         };
         b.paint(&mut cx);
     }
@@ -295,7 +333,8 @@ fn paint_node(v: &View<'_>, f: &mut Frame<'_>, p: &mut Painter, id: WidgetId, st
     // Children. TB: OnPaintChildren
     let base = origin + used_e.map(|e| e.content_ofs).unwrap_or(Point::ZERO);
     let child_offset = base + b.map(|b| b.child_translation()).unwrap_or(Point::ZERO);
-    let old_clip = b.and_then(|b| b.children_clip(local.shrink_edges(v.padding(id)))).map(|c| {
+    let child_clip = b.and_then(|b| b.children_clip(local.shrink_edges(v.padding(id))));
+    let old_clip = child_clip.map(|c| {
         let old = p.clip();
         p.set_clip(c.offset_by(base).clip(&old));
         old
@@ -340,8 +379,32 @@ fn paint_node(v: &View<'_>, f: &mut Frame<'_>, p: &mut Painter, id: WidgetId, st
             }
         }
     }
+    #[cfg(feature = "debug")]
+    if let Some(c) = child_clip.filter(|_| f.debug.settings.layout_clipping) {
+        // TB: TBScrollContainerRoot::OnPaintChildren (LAYOUT_CLIPPING)
+        p.set_translation(base);
+        p.set_opacity(opacity);
+        p.draw_rect(c, Color::rgba(255, 0, 0, 200));
+    }
     if let Some(old) = old_clip {
         p.set_clip(old);
+    }
+    #[cfg(feature = "debug")]
+    if f.debug.settings.layout_size_calculation {
+        // Paint recently arranged layouts with red and recently measured widgets
+        // with yellow, and keep repainting until they have timed out.
+        // TB: TBWidget::InvokePaint (LAYOUT_PS_DEBUGGING)
+        let recent = |t: Option<&Millis>| t.is_some_and(|&t| f.now < t + crate::debug::HIGHLIGHT_MS);
+        let (arranged, measured) = (recent(f.debug.arranged.get(&id)), recent(f.debug.measured.get(&id)));
+        p.set_translation(origin);
+        p.set_opacity(opacity);
+        if arranged {
+            p.draw_rect(local, Color::rgba(255, 30, 30, 200));
+        }
+        if measured {
+            p.draw_rect(local.shrink(1, 1, 1, 1), Color::rgba(255, 255, 30, 200));
+        }
+        f.again |= arranged || measured;
     }
     if let Some(b) = b {
         p.set_translation(origin);
@@ -359,6 +422,8 @@ fn paint_node(v: &View<'_>, f: &mut Frame<'_>, p: &mut Painter, id: WidgetId, st
             repaint: &mut f.again,
             fonts: &mut *f.fonts,
             images: f.images,
+            #[cfg(feature = "debug")]
+            debug: f.debug,
         };
         b.paint_after_children(&mut cx);
     }

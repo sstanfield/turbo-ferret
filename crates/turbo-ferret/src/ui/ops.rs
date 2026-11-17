@@ -361,6 +361,8 @@ impl Ui {
                 return cps;
             }
         }
+        #[cfg(feature = "debug")]
+        self.debug_mark_measured(id);
         let pad = self.padding(id);
         let inner = sc.constrain_by_padding(pad.horizontal(), pad.vertical());
         let r = call_hook(self, id, |w, cx| {
