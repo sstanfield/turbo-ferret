@@ -4,7 +4,6 @@
 //! reference, and a stale key fails lookup safely.
 
 use alloc::vec::Vec;
-use core::fmt;
 use core::marker::PhantomData;
 use core::num::NonZeroU32;
 
@@ -21,21 +20,21 @@ macro_rules! arena_key {
         #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
         pub struct $name {
             index: u32,
-            generation: NonZeroU32,
+            generation: core::num::NonZeroU32,
         }
-        impl ArenaKey for $name {
-            fn from_parts(index: u32, generation: NonZeroU32) -> Self {
+        impl $crate::arena::ArenaKey for $name {
+            fn from_parts(index: u32, generation: core::num::NonZeroU32) -> Self {
                 $name { index, generation }
             }
             fn index(self) -> u32 {
                 self.index
             }
-            fn generation(self) -> NonZeroU32 {
+            fn generation(self) -> core::num::NonZeroU32 {
                 self.generation
             }
         }
-        impl fmt::Debug for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        impl core::fmt::Debug for $name {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 write!(f, "{}({}v{})", stringify!($name), self.index, self.generation)
             }
         }

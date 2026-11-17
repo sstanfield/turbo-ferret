@@ -8,7 +8,7 @@ pub fn abs(x: f32) -> f32 {
 }
 
 pub fn trunc(x: f32) -> f32 {
-    if !(abs(x) < FRAC_LIMIT) {
+    if x.is_nan() || abs(x) >= FRAC_LIMIT {
         return x; // large, inf or NaN
     }
     (x as i32) as f32

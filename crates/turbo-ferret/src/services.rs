@@ -238,7 +238,7 @@ impl Services {
 fn default_decoder() -> Box<dyn ImageDecoder> {
     #[cfg(feature = "png")]
     {
-        Box::new(crate::image::PngDecoder::default())
+        Box::new(<crate::image::PngDecoder as Default>::default())
     }
     #[cfg(not(feature = "png"))]
     {
