@@ -121,7 +121,10 @@ pub fn open_resource_window(ui: &mut Ui, path: &str) -> Option<WidgetId> {
     };
     let root = ui.root();
     let w = ui.add(root, Window::default());
-    if let Err(e) = ui.inflate_node(w, &node) {
+    // WindowInfo is metadata for this function, not a widget.
+    let mut content = node.clone();
+    content.children.retain(|c| &*c.name != "WindowInfo");
+    if let Err(e) = ui.inflate_node(w, &content) {
         eprintln!("demo: {path}: {e}");
     }
     let title = node.str("WindowInfo>title", "").into_owned();

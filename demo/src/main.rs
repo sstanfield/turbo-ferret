@@ -62,7 +62,7 @@ impl EventHandler for Stage {
             println!("first frame {}x{} at {} dpi: {:?}", vp.w, vp.h, window_dpi(), self.renderer.stats());
         }
         if self.max_frames == Some(self.frames) {
-            println!("{} frames drawn, quitting", self.frames);
+            println!("{} frames drawn, last frame: {:?}; quitting", self.frames, self.renderer.stats());
             window::order_quit();
         }
     }
