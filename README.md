@@ -20,7 +20,7 @@ BLESS=1 cargo test -p turbo-ferret-soft  # re-bless golden images in tests/golde
 cargo run -p turbo-ferret-fontgen -- font.ttf --sizes 14,28 --out fonts/name   # TrueType to bitmap font
 ```
 
-Design docs are in `design/` (start with `port-design.md`; status in `decisions-and-status.md`).
+Design docs are in `design/`: `codebase-guide.md` (how the code works and how to change it), `port-design.md` (the design), `decisions-and-status.md` (decisions and status). `CLAUDE.md` is the short brief for coding agents.
 
 ## Licence
 

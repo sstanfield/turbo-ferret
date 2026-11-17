@@ -285,3 +285,4 @@ These are **not services**, just internal choices: the hash map (`BTreeMap`, `ha
 - `ecs-widget-storage-assessment.md`: the ECS versus arena assessment, verdict, `no_std` costs and mutability questions (M-01 to M-08).
 - `port-design.md`: the full port design (crates, types, traits, flows, milestones). Implementation follows this.
 - `decisions-and-status.md`: this file. Decisions, open items and mutability notes.
+- `codebase-guide.md`: how the code is put together, recipes for common changes, the traps, and what has been run on which platform. For whoever (human or agent) works on the code next; `CLAUDE.md` in the repo root is the short version that agents load first.
