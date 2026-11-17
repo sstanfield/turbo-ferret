@@ -12,13 +12,13 @@ TBLayout
 			TBTextField: text: Buttons with different fonts:
 			TBLayout
 				TBButton
-					text: "Orange"
-					font: name: Orange
+					text: "Sunset"
+					font: name: Sunset
 				TBButton
-					text: "Segoe 14"
+					text: "DejaVu Sans 14"
 					font: size: 14px
 				TBButton
-					text: "Segoe 28"
+					text: "DejaVu Sans 28"
 					font: size: 28px
 			TBTextField: text: Button containing SkinImage:
 			TBLayout

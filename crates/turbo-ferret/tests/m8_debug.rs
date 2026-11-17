@@ -77,8 +77,8 @@ fn ui() -> Ui {
     let mut ui = Ui::new(Config::default(), Services::with_loader(FsLoader::new(res)));
     ui.services_mut().log = Some(log);
     ui.load_skin("default_skin/skin.tb.txt", None).unwrap();
-    ui.add_font("Segoe", "default_font/segoe_white_with_shadow.tb.txt");
-    assert!(ui.set_default_font(FontDesc::new(tbid!("Segoe"), 14)));
+    ui.add_font("DejaVuShadow", "default_font/dejavu_white_with_shadow.tb.txt");
+    assert!(ui.set_default_font(FontDesc::new(tbid!("DejaVuShadow"), 14)));
     ui.set_viewport(Size::new(640, 480));
     ui.set_time(1000);
     LOG.with(|l| l.borrow_mut().clear());
@@ -327,8 +327,8 @@ fn atlas_pages_are_shown_beside_the_debug_window() {
     let mut ui = Ui::new(Config::default(), Services::with_loader(FsLoader::new(res)));
     ui.services_mut().log = None;
     ui.load_skin("default_skin/skin.tb.txt", None).unwrap();
-    ui.add_font("Segoe", "default_font/segoe_white_with_shadow.tb.txt");
-    assert!(ui.set_default_font(FontDesc::new(tbid!("Segoe"), 14)));
+    ui.add_font("DejaVuShadow", "default_font/dejavu_white_with_shadow.tb.txt");
+    assert!(ui.set_default_font(FontDesc::new(tbid!("DejaVuShadow"), 14)));
     ui.set_viewport(Size::new(1600, 1200));
     let win = ui.show_debug_window();
     ui.update();

@@ -2,8 +2,8 @@
 //!
 //! Turbo Ferret is a Rust port of Turbo Badger by Emil Segerås
 //! (<https://github.com/fruxo/turbobadger>). It is not the original software, and it
-//! is not endorsed by its author. The demo font is rasterized from a copyrighted
-//! font (see resources/default_font/license.txt); it is for the demo only.
+//! is not endorsed by its author. Its fonts are made from DejaVu Sans (see
+//! resources/default_font/license.txt).
 
 pub mod resource_edit;
 pub mod sources;
@@ -148,9 +148,9 @@ fn text_menu_source() -> SourceRef {
         for (text, id) in [
             ("Default font", "default font"),
             ("Default font (larger)", "large font"),
-            ("RGB font (Neon)", "rgb font Neon"),
-            ("RGB font (Orangutang)", "rgb font Orangutang"),
-            ("RGB font (Orange)", "rgb font Orange"),
+            ("RGB font (Glow)", "rgb font Glow"),
+            ("RGB font (Candy)", "rgb font Candy"),
+            ("RGB font (Sunset)", "rgb font Sunset"),
             // Not in TB's menu: its demo is built with the bitmap font renderer only.
             ("TrueType font (DejaVu Sans)", "ttf font DejaVu"),
             ("TrueType font with a glow", "ttf font DejaVuGlow"),
@@ -182,12 +182,12 @@ fn text_menu_choice(ui: &mut Ui, edit: WidgetId, choice: TbId) {
         let mut fd = ui.default_font();
         fd.size = ui.dimension_converter().dp_to_px(28).clamp(1, 255) as u16;
         ui.set_font(edit, Some(fd));
-    } else if choice == tbid!("rgb font Neon") {
-        with_font_id(ui, "Neon");
-    } else if choice == tbid!("rgb font Orangutang") {
-        with_font_id(ui, "Orangutang");
-    } else if choice == tbid!("rgb font Orange") {
-        with_font_id(ui, "Orange");
+    } else if choice == tbid!("rgb font Glow") {
+        with_font_id(ui, "Glow");
+    } else if choice == tbid!("rgb font Candy") {
+        with_font_id(ui, "Candy");
+    } else if choice == tbid!("rgb font Sunset") {
+        with_font_id(ui, "Sunset");
     } else if choice == tbid!("ttf font DejaVu") {
         with_font_id(ui, "DejaVu");
     } else if choice == tbid!("ttf font DejaVuGlow") {
@@ -695,10 +695,10 @@ impl Demo {
         if let Err(e) = ui.load_skin("default_skin/skin.tb.txt", Some("demo01/skin/skin.tb.txt")) {
             eprintln!("demo: skin: {e}");
         }
-        ui.add_font("Segoe", "default_font/segoe_white_with_shadow.tb.txt");
-        ui.add_font("Neon", "demo_fonts/neon.tb.txt");
-        ui.add_font("Orangutang", "demo_fonts/orangutang.tb.txt");
-        ui.add_font("Orange", "demo_fonts/orange.tb.txt");
+        ui.add_font("DejaVuShadow", "default_font/dejavu_white_with_shadow.tb.txt");
+        ui.add_font("Glow", "demo_fonts/glow.tb.txt");
+        ui.add_font("Candy", "demo_fonts/candy.tb.txt");
+        ui.add_font("Sunset", "demo_fonts/sunset.tb.txt");
         // TrueType: DejaVu Sans (the font TB ships as vera.ttf), under three names so the text
         // window can show it plain and with a blurred copy behind it.
         // TB: Demo01.cpp (register_stb_font_renderer, AddFontInfo("resources/vera.ttf", "Vera"))
@@ -707,7 +707,7 @@ impl Demo {
             ui.add_font(name, "DejaVuSans.ttf");
         }
         let size = ui.dimension_converter().dp_to_px(14).clamp(1, 255) as u16;
-        if !ui.set_default_font(FontDesc::new(tbid!("Segoe"), size)) {
+        if !ui.set_default_font(FontDesc::new(tbid!("DejaVuShadow"), size)) {
             eprintln!("demo: could not load the default font");
         }
         ui.set_viewport(viewport);

@@ -164,7 +164,10 @@ fn character_lists() {
     assert_eq!(parse_chars("65").unwrap(), ['A']);
     assert_eq!(parse_chars("U+41-U+43, 0x61 ,48-50").unwrap(), ['A', 'B', 'C', 'a', '0', '1', '2']);
     assert_eq!(parse_chars("").unwrap(), []);
-    assert_eq!(parse_chars("32-126,U+A0-U+FF").unwrap(), Options::default_chars());
+    let default = Options::default_chars();
+    assert_eq!(parse_chars("32-126,U+A0-U+FF").unwrap(), default[..default.len() - 27]);
+    assert_eq!(default.len(), 95 + 96 + 27);
+    assert!(default.contains(&'•') && default.contains(&'€') && default.contains(&'—'));
     assert!(parse_chars("x").is_err());
     assert!(parse_chars("70-60").is_err());
     // Surrogates are not characters.

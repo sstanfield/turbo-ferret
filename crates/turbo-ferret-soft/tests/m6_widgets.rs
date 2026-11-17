@@ -19,8 +19,8 @@ fn ui(size: Size) -> Ui {
     ui.load_language("language/lng_en.tb.txt").unwrap();
     // With the demo skin on top, for its icons ("Icon16", "Icon48").
     ui.load_skin("default_skin/skin.tb.txt", Some("demo01/skin/skin.tb.txt")).unwrap();
-    ui.add_font("Segoe", "default_font/segoe_white_with_shadow.tb.txt");
-    assert!(ui.set_default_font(FontDesc::new(tbid!("Segoe"), 14)));
+    ui.add_font("DejaVuShadow", "default_font/dejavu_white_with_shadow.tb.txt");
+    assert!(ui.set_default_font(FontDesc::new(tbid!("DejaVuShadow"), 14)));
     ui.set_viewport(size);
     ui
 }

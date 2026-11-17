@@ -48,7 +48,7 @@
 2. *Altered versions must be plainly marked as such.* The new name, that sentence, and the `// TB: <file> <function>` comments on ported code (section 21) mark it.
 3. *The notice must not be removed from source distributions.* The workspace root carries a `NOTICE` (or `LICENSE-turbobadger`) file with Turbo Badger's copyright line and full zlib text, and every published crate includes it (Cargo `include`).
 
-**Assets reused from Turbo Badger.** The default skin (`resources/default_skin`) is public domain, per its `license.txt`. The default font folder (`resources/default_font`) is marked public domain too, but its own `license.txt` warns that the bitmaps are rasterized from a copyrighted font (Segoe), with "use at your own risk". So the port uses that font **only in the demo and tests**, never inside a published crate. A published default font, if one is wanted, is rasterized from an openly licensed font, which can be done at M8 alongside TrueType.
+**Assets reused from Turbo Badger.** The default skin (`resources/default_skin`) is public domain, per its `license.txt`, and the demo's layouts, skin and images come with TB under its zlib licence. TB's fonts are **not** reused: its default font folder is marked public domain too, but its own `license.txt` warns that the bitmaps are rasterized from a copyrighted font (Segoe), with "use at your own risk". The port's fonts are made from DejaVu Sans, which is openly licensed (decisions-and-status.md, decision 14 and deviations 58 and 59).
 
 **The port's own licence: zlib** (decided by Steve, 2026-11-17), the same as Turbo Badger. Each crate's `Cargo.toml` sets `license = "Zlib"`. The workspace root has a `LICENSE` file with Turbo Ferret's own zlib notice, next to the `NOTICE` file carrying Turbo Badger's copyright line and licence text, and both ship in every published crate.
 
@@ -342,8 +342,8 @@ Fields are disjoint on purpose: paint borrows `tree` and `skin` immutably and `f
 ```rust
 let mut ui = Ui::new(Config::default(), Services::default());   // std+png: FsLoader("."), PngDecoder
 ui.load_skin("resources/default_skin/skin.tb.txt")?;
-ui.fonts_mut().add_font("Segoe", "resources/default_font/segoe_white_with_shadow.tb.txt");
-ui.fonts_mut().set_default(FontDesc::new(tbid!("Segoe"), 14));
+ui.fonts_mut().add_font("DejaVuShadow", "resources/default_font/dejavu_white_with_shadow.tb.txt");
+ui.fonts_mut().set_default(FontDesc::new(tbid!("DejaVuShadow"), 14));
 ui.set_viewport(Size::new(1280, 720));                             // sizes the root node
 let win = ui.add(ui.root(), Window::default());
 ui.inflate_file(ui.content_root(win), "ui/main.tb.txt")?;

@@ -2,8 +2,8 @@
 //! shows readable text before any font is loaded.
 //!
 //! The files in `default/` are made from `resources/DejaVuSans.ttf` by
-//! `turbo-ferret-fontgen` (printable ASCII and Latin-1 at 14, 21 and 28 pixels: the
-//! default size at 96, 144 and 192 DPI). A face of another size uses the nearest
+//! `turbo-ferret-fontgen` (the characters of Windows-1252 at 14, 21 and 28 pixels:
+//! the default size at 96, 144 and 192 DPI). Other characters draw as `?`. A face of another size uses the nearest
 //! of the three, as every bitmap font does.
 //!
 //! DejaVu Sans has a licence of its own (`default/LICENSE-DejaVu.txt`, Bitstream
@@ -55,7 +55,9 @@ mod tests {
             let mut font = default_font(asked).expect("the built-in font loads");
             assert_eq!(font.size(), got, "asked for {asked}");
             assert!(font.has_glyph_table());
-            for c in (' '..='~').chain('\u{a0}'..='\u{ff}') {
+            // ASCII, Latin-1, and what the toolkit itself draws: the bullet of
+            // password fields and the marks for visible white space.
+            for c in (' '..='~').chain('\u{a0}'..='\u{ff}').chain("•¶·»€…—“”".chars()) {
                 assert!(font.has_glyph(c), "{c:?}");
             }
             assert!(font.glyph_metrics('A').is_some_and(|m| m.advance > 0 && m.w > 0));

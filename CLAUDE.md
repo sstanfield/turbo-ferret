@@ -22,7 +22,7 @@ deviations from TB, status).
 | `crates/turbo-ferret-ttf` | Optional TrueType backend: own parser and rasterizer (`no_std`) |
 | `tools/fontgen` | `turbo-ferret-fontgen`: TrueType to bitmap font (not published) |
 | `demo` | TB's demo01, ported; `demo/tests/screenshot.rs` drives it headlessly |
-| `resources` | TB's default skin, fonts, language, demo layouts and images |
+| `resources` | TB's default skin, language, demo layouts and images; fonts made from DejaVu Sans (never TB's own, see Rules) |
 | `tests/golden` | Golden images (written by the soft renderer tests) |
 | `design` | Design documents |
 | `turbobadger/` | The C++ original, for reference. Gitignored: if it is missing, `git clone https://github.com/fruxo/turbobadger turbobadger` |
@@ -70,6 +70,12 @@ cargo run -p turbo-ferret-fontgen -- resources/DejaVuSans.ttf --sizes 14,21,28 -
   introduces itself. The built-in font has its own licence
   (`crates/turbo-ferret/src/font/default/LICENSE-DejaVu.txt`); never name a
   derived font "Vera", "Bitstream" or "Arev".
+- **Assets:** nothing of doubtful licence goes into the repository. TB's own
+  bitmap fonts were rasterized from fonts their author could not vouch for and
+  were removed, history included; every font here is made from DejaVu Sans by
+  `turbo-ferret-fontgen` (the commands are in `resources/default_font/license.txt`,
+  and tests fail if the files and the tool disagree). A new font needs an open
+  licence and its notice next to it.
 - **Deviations from TB:** when behaviour differs from TB on purpose, add a
   numbered entry to "Deviations" in `design/decisions-and-status.md`.
 - **Tests:** a fix comes with a test that fails without it. Anything a user sees

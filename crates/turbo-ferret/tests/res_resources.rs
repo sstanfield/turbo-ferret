@@ -53,7 +53,7 @@ fn spot_checks() {
     assert_eq!(condition.str("target", ""), "parent");
     assert_eq!(condition.str("value", ""), "button_group");
 
-    let font = load("default_font/segoe_white_with_shadow.tb.txt");
+    let font = load("default_font/dejavu_white_with_shadow.tb.txt");
     let glyphs = font.iter().next().unwrap().str("glyph_str", "");
     assert!(glyphs.starts_with("!\"#$%&'()*+,-./0123456789:;<=>?@ABC"), "{glyphs}");
     assert!(glyphs.contains("[\\]^_"), "unknown escapes are kept: {glyphs}");

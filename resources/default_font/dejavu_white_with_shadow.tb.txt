@@ -1,0 +1,17 @@
+info
+	generator turbo-ferret-fontgen
+	glyph_str !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~ ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿŒœŠšŸŽžƒˆ˜–—‘’‚“”„†‡•…‰‹›€™
+size 14
+	bitmap dejavu_white_with_shadow_14.png
+	ascent 15
+	descent 5
+	x_ofs -3
+	advance_delta -6
+	space_advance 4
+size 28
+	bitmap dejavu_white_with_shadow_28.png
+	ascent 30
+	descent 11
+	x_ofs -6
+	advance_delta -11
+	space_advance 9

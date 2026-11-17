@@ -10,12 +10,16 @@
 //! (<https://github.com/fruxo/turbobadger>). It is not the original software, and it
 //! is not endorsed by its author.
 
+pub mod strip;
+
 use std::fmt;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
 use turbo_ferret::font::{GlyphImage, GlyphMetrics, GlyphSource};
 use turbo_ferret_ttf::{Font, TtfFace};
+
+pub use strip::{Strip, StripOutput, StripStyle, generate_strip};
 
 /// What to generate.
 #[derive(Clone, Debug)]
@@ -29,9 +33,13 @@ pub struct Options {
 }
 
 impl Options {
-    /// Printable ASCII and Latin-1: U+0020 to U+007E and U+00A0 to U+00FF.
+    /// The characters of Windows-1252, which is what Turbo Badger's default font
+    /// had: printable ASCII (U+0020 to U+007E), Latin-1 (U+00A0 to U+00FF) and 27
+    /// more, among them the bullet (which password fields show), the euro sign,
+    /// the ellipsis, dashes and curly quotes.
     pub fn default_chars() -> Vec<char> {
-        (' '..='~').chain('\u{a0}'..='\u{ff}').collect()
+        const MORE: &str = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ";
+        (' '..='~').chain('\u{a0}'..='\u{ff}').chain(MORE.chars()).collect()
     }
 }
 
@@ -119,6 +127,16 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+/// The description names its bitmaps by the stem, and has to read back: a stem the
+/// resource parser would take for numbers does not.
+pub(crate) fn stem_reads_back(stem: &str) -> bool {
+    let probe = format!("{stem}_1.png");
+    !stem.is_empty()
+        && stem.chars().all(|c| !c.is_control())
+        && stem.trim() == stem
+        && matches!(turbo_ferret::Value::parse_auto(&probe), turbo_ferret::Value::Str(_))
+}
+
 /// The largest bitmap side.
 const MAX_SIDE: u32 = 4096;
 
@@ -142,12 +160,7 @@ pub fn generate(ttf: &[u8], opts: &Options) -> Result<Output, Error> {
         chars.insert(0, ' ');
     }
 
-    // The description names its bitmaps by this stem, and has to read back.
-    let probe = format!("{}_1.png", opts.stem);
-    let readable = opts.stem.chars().all(|c| !c.is_control())
-        && opts.stem.trim() == opts.stem
-        && matches!(turbo_ferret::Value::parse_auto(&probe), turbo_ferret::Value::Str(_));
-    if !readable || opts.stem.is_empty() {
+    if !stem_reads_back(&opts.stem) {
         return Err(Error::BadStem(opts.stem.clone()));
     }
 

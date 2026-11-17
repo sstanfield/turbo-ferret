@@ -1,5 +1,18 @@
-﻿This folder has some default fonts for demo purposes.
+The fonts in this folder are made by turbo-ferret-fontgen (tools/fontgen) from
+DejaVu Sans (../DejaVuSans.ttf): its glyphs rasterized into bitmap strips, with a
+shadow, a glow or a color gradient baked in.
 
-The license of the files in this folder is Public Domain, however
-i can't guarantee that using rasterized graphics from copyrighted
-fonts as a bitmap font is ok. Use at your own risk!
+They take the place of the bitmap fonts Turbo Badger ships in its folder of the
+same name, which were rasterized from fonts whose licences its author could not
+vouch for ("use at your own risk"). None of those files are here.
+
+DejaVu Sans is under the Bitstream Vera licence with the DejaVu and Arev
+additions: see ../DejaVuSans-LICENSE.txt. Its notices go with every copy of the
+font, these bitmaps included. As that licence asks of altered versions, none of
+these fonts is called "Bitstream", "Vera" or "Arev".
+
+To make them again:
+  cargo run -p turbo-ferret-fontgen -- resources/DejaVuSans.ttf --strip shadow --sizes 14,28 --out resources/default_font/dejavu_white_with_shadow
+  cargo run -p turbo-ferret-fontgen -- resources/DejaVuSans.ttf --strip glow --sizes 42 --out resources/demo_fonts/glow
+  cargo run -p turbo-ferret-fontgen -- resources/DejaVuSans.ttf --strip sunset --sizes 30 --out resources/demo_fonts/sunset
+  cargo run -p turbo-ferret-fontgen -- resources/DejaVuSans.ttf --strip candy --sizes 48 --out resources/demo_fonts/candy

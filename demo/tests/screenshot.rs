@@ -443,8 +443,8 @@ fn demo_m8_windows_headless() {
     let edit = demo.ui.find_as::<EditField>(root, tbid!("editfield")).expect("the text window's field");
     let text_win = demo.ui.parent_window(edit).unwrap();
     demo.ui.activate_window(text_win);
-    let segoe = demo.ui.calculated_font(edit);
-    let segoe_width = demo.ui.text_width(segoe, "Turbo Ferret");
+    let default_font = demo.ui.calculated_font(edit);
+    let default_width = demo.ui.text_width(default_font, "Turbo Ferret");
     for (item_id, font, shot_name) in [
         (tbid!("ttf font DejaVu"), tbid!("DejaVu"), "demo_m8_truetype.png"),
         (tbid!("ttf font DejaVuGlow"), tbid!("DejaVuGlowText"), "demo_m8_truetype_glow.png"),
@@ -467,7 +467,11 @@ fn demo_m8_windows_headless() {
         let face = demo.ui.fonts().face(fd);
         assert_eq!(face.desc(), fd, "the TrueType face was created");
         assert!(!face.is_box_font());
-        assert_ne!(demo.ui.text_width(fd, "Turbo Ferret"), segoe_width, "another font, other widths");
+        // The default font is a strip made from this same font: at the same size the
+        // widths are the same.
+        if fd.size == default_font.size {
+            assert_eq!(demo.ui.text_width(fd, "Turbo Ferret"), default_width);
+        }
         shot(&mut demo, &mut soft, shot_name);
     }
     // The glow: a blurred face behind the text face.

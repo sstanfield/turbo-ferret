@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use turbo_ferret_fontgen::{Options, generate, parse_chars};
+use turbo_ferret_fontgen::{Options, StripStyle, generate, generate_strip, parse_chars};
 
 const USAGE: &str = "\
 usage: turbo-ferret-fontgen <font.ttf> --sizes <n,n,...> --out <dir/name> [options]
@@ -15,13 +15,18 @@ Writes <dir/name>.tb.txt and <dir/name>_<size>.png for each size. Register the
   --out dir/name         where to write, without extension
   --chars 32-126,U+A0-U+FF
                          code points and ranges to include
-                         (default: printable ASCII and Latin-1)
+                         (default: Windows-1252: ASCII, Latin-1, and the
+                         bullet, euro sign, dashes and curly quotes)
   --text file.txt        also include every character of this UTF-8 file
+  --strip <style>        write Turbo Badger's strip format instead, one strip per
+                         size with a look baked in: shadow (white, in the text
+                         color), glow, sunset, candy (color fonts)
 ";
 
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
     let (mut font, mut sizes, mut out, mut chars, mut text) = (None, None, None, None, Vec::new());
+    let mut strip = None;
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or(format!("{name} needs a value"));
         match arg.as_str() {
@@ -29,6 +34,10 @@ fn run() -> Result<(), String> {
             "--out" => out = Some(PathBuf::from(value("--out")?)),
             "--chars" => chars = Some(value("--chars")?),
             "--text" => text.push(PathBuf::from(value("--text")?)),
+            "--strip" => {
+                let name = value("--strip")?;
+                strip = Some(StripStyle::by_name(&name).ok_or(format!("unknown style {name:?}"))?);
+            }
             "-h" | "--help" => {
                 print!("{USAGE}");
                 return Ok(());
@@ -58,17 +67,27 @@ fn run() -> Result<(), String> {
     let dir = out.parent().map(PathBuf::from).unwrap_or_default();
 
     let ttf = std::fs::read(&font).map_err(|e| format!("{}: {e}", font.display()))?;
-    let output = generate(&ttf, &Options { stem: stem.clone(), sizes, chars }).map_err(|e| e.to_string())?;
+    let opts = Options { stem: stem.clone(), sizes, chars };
+    let (files, missing) = match strip {
+        Some(style) => {
+            let output = generate_strip(&ttf, &opts, &style).map_err(|e| e.to_string())?;
+            (output.files(&stem), output.missing)
+        }
+        None => {
+            let output = generate(&ttf, &opts).map_err(|e| e.to_string())?;
+            (output.files(&stem), output.missing)
+        }
+    };
     if !dir.as_os_str().is_empty() {
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    for (name, data) in output.files(&stem) {
+    for (name, data) in files {
         let path = dir.join(&name);
         std::fs::write(&path, &data).map_err(|e| format!("{}: {e}", path.display()))?;
         println!("{} ({} bytes)", path.display(), data.len());
     }
-    if !output.missing.is_empty() {
-        let list: Vec<String> = output.missing.iter().map(|&c| format!("U+{:04X}", c as u32)).collect();
+    if !missing.is_empty() {
+        let list: Vec<String> = missing.iter().map(|&c| format!("U+{:04X}", c as u32)).collect();
         eprintln!("not in the font, left out: {}", list.join(" "));
     }
     Ok(())

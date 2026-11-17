@@ -68,8 +68,7 @@ fn truetype_text_golden() {
 }
 
 /// Out of the box: a `Ui` with the default skin and no font loaded shows its text in
-/// the built-in font. (The dash in the text is outside its characters, printable
-/// ASCII and Latin-1: it draws as a question mark, as in any bitmap font.)
+/// the built-in font.
 #[test]
 fn built_in_font_golden() {
     let res = format!("{}/../../resources", env!("CARGO_MANIFEST_DIR"));
@@ -95,4 +94,36 @@ fn built_in_font_golden() {
     r.clear(BG);
     ui.paint(&mut r);
     assert_golden("built_in_font", &r);
+}
+
+/// The demo's color fonts: strips in Turbo Badger's format with a look baked in,
+/// drawn as they are whatever the text color.
+#[test]
+fn color_strip_fonts_golden() {
+    let res = format!("{}/../../resources", env!("CARGO_MANIFEST_DIR"));
+    let size = Size::new(430, 230);
+    let mut ui = Ui::new(Config::default(), Services::with_loader(FsLoader::new(res)));
+    ui.services_mut().log = None;
+    ui.set_viewport(size);
+    let root = ui.root();
+    let mut y = 6;
+    for (name, file, px, text) in [
+        ("Glow", "demo_fonts/glow.tb.txt", 42u16, "Glow: Ferret 42"),
+        ("Sunset", "demo_fonts/sunset.tb.txt", 30, "Sunset: Jumping quickly, 30"),
+        ("Candy", "demo_fonts/candy.tb.txt", 48, "Candy: Ägg & jam"),
+    ] {
+        let id = ui.add_font(name, file);
+        let fd = FontDesc::new(id, px);
+        assert!(ui.create_font_face(fd));
+        let t = ui.add(root, turbo_ferret::widgets::TextField::new(text));
+        ui.set_font(t, Some(fd));
+        let h = ui.fonts().face(fd).height();
+        ui.set_rect(t, Rect::new(8, y, 420, h));
+        y += h + 4;
+    }
+    ui.update();
+    let mut r = SoftRenderer::new(size);
+    r.clear(BG);
+    ui.paint(&mut r);
+    assert_golden("color_strip_fonts", &r);
 }
