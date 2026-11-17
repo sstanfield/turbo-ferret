@@ -275,8 +275,10 @@ pub trait Widget: Any {
     fn child_translation(&self) -> Point {
         Point::ZERO
     }
-    fn clips_children(&self) -> bool {
-        false
+    /// Clip rect for children (local coordinates), given the padding rect. `None` = no
+    /// clip. TB: overridden OnPaintChildren with SetClipRect
+    fn children_clip(&self, padding: crate::geom::Rect) -> Option<crate::geom::Rect> {
+        None
     }
     fn scroll_info(&self) -> Option<ScrollInfo> {
         None

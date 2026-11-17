@@ -35,6 +35,8 @@ flags! {
         const NEEDS_ARRANGE = 1024;
         /// PRESSED was set by keyboard click (TB: has_key_pressed_state).
         const KEY_PRESSED = 2048;
+        /// Children inflated into this node go to the bottom (TB: SetZInflate).
+        const INFLATE_BOTTOM = 4096;
     }
 }
 

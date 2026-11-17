@@ -36,6 +36,10 @@ use crate::services::{Level, Services};
 use crate::value::Value;
 use crate::widget::{Widget, WidgetState};
 
+use crate::lang::Language;
+use crate::layout::dim::DimensionConverter;
+use crate::reader::Registry;
+use crate::res::RefTrees;
 use listen::Listeners;
 use tree::Tree;
 use value_group::ValueGroup;
@@ -100,12 +104,17 @@ pub struct Ui {
     pub(crate) default_font: FontDesc,
     /// Reusable buffer for snapshot walks.
     pub(crate) scratch: Vec<WidgetId>,
+    pub(crate) registry: Registry,
+    pub(crate) lang: Language,
+    pub(crate) refs: RefTrees,
+    /// Dimension conversion (set from the skin at M3).
+    pub(crate) dim: DimensionConverter,
 }
 
 impl Ui {
     pub fn new(config: Config, services: Services) -> Ui {
         let root = Node::new(Box::new(Root));
-        Ui {
+        let mut ui = Ui {
             tree: Tree::new(root),
             input: InputState::default(),
             values: ValueGroup::default(),
@@ -122,7 +131,21 @@ impl Ui {
             viewport: Size::ZERO,
             default_font: FontDesc::default(),
             scratch: Vec::new(),
-        }
+            registry: Registry::default(),
+            lang: Language::default(),
+            refs: RefTrees::default(),
+            dim: DimensionConverter::new(96, 96, 96),
+        };
+        crate::widgets::register_builtins(&mut ui);
+        ui
+    }
+
+    pub fn dimension_converter(&self) -> &DimensionConverter {
+        &self.dim
+    }
+
+    pub fn set_dimension_converter(&mut self, d: DimensionConverter) {
+        self.dim = d;
     }
 
     // ------------------------------------------------------------------

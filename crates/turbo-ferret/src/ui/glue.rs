@@ -21,6 +21,16 @@ impl Ui {
         self.skin_dirty = false;
     }
 
+    /// The skin element's `spacing` (M3).
+    pub fn skin_spacing(&self, _id: WidgetId) -> Option<i32> {
+        None
+    }
+
+    /// The skin's default spacing (M3). TB: TBSkin::GetDefaultSpacing
+    pub fn default_spacing(&self) -> i32 {
+        0
+    }
+
     pub(crate) fn update_animations(&mut self) {}
 
     pub(crate) fn has_running_animations(&self) -> bool {

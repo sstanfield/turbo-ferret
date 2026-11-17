@@ -30,6 +30,7 @@ pub mod layout;
 pub mod math;
 pub mod msg;
 pub mod paint;
+pub mod reader;
 pub mod render;
 pub mod res;
 pub mod services;
@@ -37,16 +38,20 @@ pub mod skin;
 pub mod ui;
 pub mod value;
 pub mod widget;
+pub mod widgets;
 
 pub use arena::{Arena, SideTable, WidgetId};
 pub use event::{Event, EventKind, Modifiers, SpecialKey};
 pub use font::FontDesc;
 pub use geom::{Color, Edges, Point, Rect, Region, Size};
 pub use id::TbId;
+pub use lang::Language;
 pub use layout::{Gravity, LayoutParams, PreferredSize, SizeConstraints, Visibility};
 pub use msg::{Message, Millis};
 pub use paint::PaintCtx;
+pub use reader::{Factory, InflateError};
 pub use render::{BitmapId, Quad, Renderer};
+pub use res::{ParseError, RefTrees, ResNode};
 #[cfg(feature = "std")]
 pub use services::FsLoader;
 pub use services::{DecodeError, Image, ImageDecoder, LoadError, MemLoader, ResourceLoader, Services};
