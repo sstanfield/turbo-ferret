@@ -24,6 +24,7 @@ use crate::render::painter::Painter;
 
 use super::backend::{GlyphImage, GlyphMetrics, GlyphSource};
 use super::desc::FontDesc;
+use super::effect::FontEffect;
 
 /// Size of a glyph cache page. Larger glyphs are not cached (and not drawn).
 /// TB: TB_GLYPH_CACHE_WIDTH, TB_GLYPH_CACHE_HEIGHT
@@ -113,7 +114,13 @@ impl GlyphCache {
     /// The glyph for `c` in `face`, rendering it with `src` if it is not cached yet.
     /// TB: TBFontFace::GetGlyph (render_if_needed), TBFontFace::RenderGlyph,
     /// TBFontGlyphCache::CreateFragment
-    pub(crate) fn render(&mut self, face: FontDesc, c: char, src: &mut dyn GlyphSource) -> Glyph {
+    pub(crate) fn render(
+        &mut self,
+        face: FontDesc,
+        c: char,
+        src: &mut dyn GlyphSource,
+        effect: &mut FontEffect,
+    ) -> Glyph {
         if let Some(g) = self.glyphs.get(&(face, c)) {
             return *g;
         }
@@ -122,6 +129,8 @@ impl GlyphCache {
         let mut glyph = Glyph { metrics, frag: None, color: false };
         self.image.clear();
         if src.rasterize(c, &mut self.image) {
+            // TB: TBFontFace::RenderGlyph (m_effect.Render)
+            effect.apply(&mut glyph.metrics, &mut self.image);
             glyph.color = self.image.color;
             let size = self.image.size;
             let page = self.atlas.default_page_size();
@@ -163,6 +172,12 @@ impl GlyphCache {
         } else {
             self.cleared_last_frame = false;
         }
+    }
+
+    /// Forget the glyphs of one face, so they are rendered again when next used
+    /// (their atlas space is reclaimed when the cache is next cleared).
+    pub(crate) fn forget_face(&mut self, face: FontDesc) {
+        self.glyphs.retain(|(f, _), _| *f != face);
     }
 
     /// Drop every glyph. Page bitmaps are destroyed on the next upload (or

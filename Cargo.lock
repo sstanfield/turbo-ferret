@@ -194,6 +194,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "turbo-ferret-fontgen"
+version = "0.1.0"
+dependencies = [
+ "png",
+ "turbo-ferret",
+ "turbo-ferret-soft",
+ "turbo-ferret-ttf",
+]
+
+[[package]]
 name = "turbo-ferret-miniquad"
 version = "0.1.0"
 dependencies = [
@@ -208,6 +218,7 @@ version = "0.1.0"
 dependencies = [
  "png",
  "turbo-ferret",
+ "turbo-ferret-ttf",
 ]
 
 [[package]]

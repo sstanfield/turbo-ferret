@@ -1,0 +1,24 @@
+[package]
+name = "turbo-ferret-fontgen"
+description = "Turns a TrueType font into a Turbo Ferret bitmap font (a description and one PNG per size), so an app can ship fonts without a rasterizer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "turbo-ferret-fontgen"
+path = "src/main.rs"
+
+[dependencies]
+turbo-ferret = { path = "../../crates/turbo-ferret" }
+turbo-ferret-ttf = { path = "../../crates/turbo-ferret-ttf" }
+# Writes the PNG files. A build-time tool only: apps do not depend on this crate.
+png = "0.17"
+
+[dev-dependencies]
+turbo-ferret-soft = { path = "../../crates/turbo-ferret-soft" }

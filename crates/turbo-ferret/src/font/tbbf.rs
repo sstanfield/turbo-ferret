@@ -20,6 +20,29 @@
 //! right edge (a `"` needs something between its two marks), and glyphs are
 //! separated by at least one clear column.
 //!
+//! # Glyph tables (a Turbo Ferret addition)
+//!
+//! A strip found by its clear columns cannot hold glyphs that reach under their
+//! neighbours or have gaps, and every glyph is as high as the strip. So a size node
+//! may list its glyphs instead, which is what `turbo-ferret-fontgen` writes when it
+//! turns a TrueType font into bitmaps:
+//!
+//! ```text
+//! size 14
+//!     bitmap vera_14.png
+//!     ascent 13
+//!     descent 3
+//!     height 16               line height, if not ascent + descent
+//!     glyphs
+//!         U+0020 0 0 0 0 0 0 4        a space: no image, advance 4
+//!         U+0041 1 1 10 11 0 -11 10   x y w h in the bitmap, then the offset of
+//!                                     the image from the pen (x) and from the
+//!                                     baseline (y, negative is up), then the advance
+//! ```
+//!
+//! With a glyph table, `glyph_str`, `x_ofs`, `advance_delta` and `space_advance` are
+//! not used, and the bitmap can be packed in any way.
+//!
 //! TB: tb_font_renderer_tbbf.cpp (TBBFRenderer)
 
 use alloc::boxed::Box;
@@ -54,6 +77,20 @@ struct Column {
     w: i32,
 }
 
+/// One glyph: where its image is in the bitmap and how it is placed.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct Cell {
+    /// The image in the bitmap (`w` or `h` 0: nothing to draw).
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    /// Offset of the image from the pen and from the baseline.
+    ofs_x: i32,
+    ofs_y: i32,
+    advance: i32,
+}
+
 /// A TBBF font loaded at one size (one strip). TB: TBBFRenderer
 pub struct TbbfFont {
     size: u16,
@@ -65,7 +102,9 @@ pub struct TbbfFont {
     strip_size: Size,
     /// The strip, premultiplied RGBA8.
     pixels: Vec<u8>,
-    glyphs: BTreeMap<char, Column>,
+    glyphs: BTreeMap<char, Cell>,
+    /// The glyphs come from a glyph table, not from the strip's clear columns.
+    table: bool,
 }
 
 impl core::fmt::Debug for TbbfFont {
@@ -105,7 +144,8 @@ impl TbbfFont {
         // Metrics
         let ascent = size_node.int("ascent", 0);
         let descent = size_node.int("descent", 0);
-        let metrics = FontMetrics { ascent, descent, height: ascent.saturating_add(descent) };
+        let height = size_node.int("height", ascent.saturating_add(descent));
+        let metrics = FontMetrics { ascent, descent, height };
 
         // The bitmap for the size, in the same folder as the description.
         let bitmap = size_node.str("bitmap", "");
@@ -117,9 +157,31 @@ impl TbbfFont {
             return None;
         }
 
-        // TB: TBBFRenderer::FindGlyphs (fails without a glyph string)
-        let glyph_str = node.value_at("info>glyph_str")?.as_str();
-        let glyphs = find_glyphs(&glyph_str, image.size, &image.rgba);
+        let x_ofs = size_node.int("x_ofs", 0);
+        let advance_delta = size_node.int("advance_delta", 0);
+        let table = size_node.get("glyphs");
+        let glyphs = match table {
+            Some(table) => table_glyphs(table, image.size),
+            None => {
+                // TB: TBBFRenderer::FindGlyphs (fails without a glyph string)
+                let glyph_str = node.value_at("info>glyph_str")?.as_str();
+                find_glyphs(&glyph_str, image.size, &image.rgba)
+                    .into_iter()
+                    .map(|(c, g)| {
+                        let cell = Cell {
+                            x: g.x,
+                            y: 0,
+                            w: g.w,
+                            h: image.size.h,
+                            ofs_x: x_ofs,
+                            ofs_y: -ascent,
+                            advance: g.w.saturating_add(advance_delta),
+                        };
+                        (c, cell)
+                    })
+                    .collect()
+            }
+        };
 
         // Premultiply once; glyphs are copied out of the strip as they are.
         let mut pixels = image.rgba;
@@ -134,13 +196,14 @@ impl TbbfFont {
         Some(TbbfFont {
             size: u16::try_from(size_node.value.as_int()).unwrap_or(size),
             metrics,
-            x_ofs: size_node.int("x_ofs", 0),
-            advance_delta: size_node.int("advance_delta", 0),
+            x_ofs,
+            advance_delta,
             space_advance: size_node.int("space_advance", 0),
             rgb: node.int("info>rgb", 0) != 0,
             strip_size: image.size,
             pixels,
             glyphs,
+            table: table.is_some(),
         })
     }
 
@@ -186,8 +249,14 @@ impl TbbfFont {
         self.space_advance
     }
 
+    /// True if the glyphs come from a glyph table in the description (see the
+    /// module documentation), false if they were found in the strip.
+    pub fn has_glyph_table(&self) -> bool {
+        self.table
+    }
+
     /// The glyph for `c`, or `?` for characters the strip lacks.
-    fn lookup(&self, c: char) -> Option<Column> {
+    fn lookup(&self, c: char) -> Option<Cell> {
         self.glyphs.get(&c).or_else(|| self.glyphs.get(&'?')).copied()
     }
 }
@@ -200,34 +269,70 @@ impl GlyphSource for TbbfFont {
 
     // TB: tb_font_renderer_tbbf.cpp TBBFRenderer::GetGlyphMetrics
     fn glyph_metrics(&mut self, c: char) -> Option<GlyphMetrics> {
-        let (advance, w, h) = if c == ' ' {
-            (self.space_advance, 0, 0)
-        } else {
-            let g = self.lookup(c)?;
-            (g.w.saturating_add(self.advance_delta), g.w, self.strip_size.h)
-        };
-        Some(GlyphMetrics { advance, x: self.x_ofs, y: -self.metrics.ascent, w, h })
+        if c == ' ' && !self.table {
+            // A strip cannot hold a space: its width is given.
+            return Some(GlyphMetrics {
+                advance: self.space_advance,
+                x: self.x_ofs,
+                y: -self.metrics.ascent,
+                w: 0,
+                h: 0,
+            });
+        }
+        let g = self.lookup(c)?;
+        Some(GlyphMetrics { advance: g.advance, x: g.ofs_x, y: g.ofs_y, w: g.w, h: g.h })
     }
 
     // TB: tb_font_renderer_tbbf.cpp TBBFRenderer::RenderGlyph
     fn rasterize(&mut self, c: char, out: &mut GlyphImage) -> bool {
-        if c == ' ' {
+        if c == ' ' && !self.table {
             return false;
         }
         let Some(g) = self.lookup(c) else {
             return false;
         };
+        if g.w <= 0 || g.h <= 0 {
+            return false;
+        }
         let stride = self.strip_size.w as usize * 4;
         let (x, w) = (g.x as usize * 4, g.w as usize * 4);
-        out.size = Size::new(g.w, self.strip_size.h);
+        out.size = Size::new(g.w, g.h);
         out.format = GlyphFormat::Rgba;
         out.color = self.rgb;
         out.data.clear();
-        for row in self.pixels.chunks_exact(stride) {
+        for row in self.pixels.chunks_exact(stride).skip(g.y as usize).take(g.h as usize) {
             out.data.extend_from_slice(&row[x..x + w]);
         }
         true
     }
+}
+
+/// Read a glyph table: one child per glyph, named by its code point (`U+0041`), with
+/// seven numbers: x, y, w, h in the bitmap, x and y offset, advance. Entries that do
+/// not parse or do not fit in the bitmap are left out.
+fn table_glyphs(table: &ResNode, bitmap: Size) -> BTreeMap<char, Cell> {
+    let mut glyphs = BTreeMap::new();
+    for g in &table.children {
+        let Some(c) = g.name.strip_prefix("U+").and_then(|h| u32::from_str_radix(h, 16).ok()).and_then(char::from_u32)
+        else {
+            continue;
+        };
+        let Some(v) = g.value.as_array().filter(|v| v.len() == 7) else {
+            continue;
+        };
+        let n = |i: usize| v[i].as_int();
+        let cell = Cell { x: n(0), y: n(1), w: n(2), h: n(3), ofs_x: n(4), ofs_y: n(5), advance: n(6) };
+        let fits = cell.x >= 0
+            && cell.y >= 0
+            && cell.w >= 0
+            && cell.h >= 0
+            && cell.x.checked_add(cell.w).is_some_and(|r| r <= bitmap.w)
+            && cell.y.checked_add(cell.h).is_some_and(|b| b <= bitmap.h);
+        if fits {
+            glyphs.insert(c, cell);
+        }
+    }
+    glyphs
 }
 
 /// Find each character of `glyph_str` in the strip, left to right, stopping at the
@@ -402,5 +507,59 @@ mod tests {
         let mut img = GlyphImage::new();
         assert!(f.rasterize('a', &mut img));
         assert!(img.color);
+    }
+    /// A glyph table: the 6x2 bitmap's top row is opaque white, its bottom row the
+    /// half-transparent color (see `strip`).
+    const TABLE: &str = "size 10\n\tbitmap f10.png\n\tascent 8\n\tdescent 2\n\theight 12\n\tglyphs\n\
+                         \t\tU+0020 0 0 0 0 0 0 3\n\
+                         \t\tU+0061 0 0 2 2 1 -7 4\n\
+                         \t\tU+0062 3 1 3 1 -1 -1 2\n\
+                         \t\tU+003F 2 0 1 1 0 -5 6\n\
+                         \t\tU+0063 4 0 3 2 0 0 5\n\
+                         \t\tU+0064 0 1 6 2 0 0 5\n\
+                         \t\tU+0065 -1 0 2 2 0 0 5\n\
+                         \t\tU+0066 0 0 2 2 0 0\n\
+                         \t\tU+D800 0 0 1 1 0 0 5\n\
+                         \t\tx 0 0 1 1 0 0 5\n\
+                         \t\tU+1F600 5 1 1 1 0 -1 9\n";
+
+    #[test]
+    fn glyph_tables_place_glyphs_freely() {
+        let mut f = load(TABLE, 10, "######").unwrap();
+        assert!(f.has_glyph_table());
+        assert_eq!(f.metrics, FontMetrics { ascent: 8, descent: 2, height: 12 });
+        // The entries that parse and fit: space, a, b, ?, and the emoji.
+        assert_eq!(f.glyph_count(), 5);
+        for c in "cdef".chars() {
+            assert!(!f.has_glyph(c), "{c:?}: outside the bitmap or malformed");
+        }
+        assert_eq!(f.glyph_metrics('a'), Some(GlyphMetrics { advance: 4, x: 1, y: -7, w: 2, h: 2 }));
+        assert_eq!(f.glyph_metrics('b'), Some(GlyphMetrics { advance: 2, x: -1, y: -1, w: 3, h: 1 }));
+        assert_eq!(f.glyph_metrics('😀'), Some(GlyphMetrics { advance: 9, x: 0, y: -1, w: 1, h: 1 }));
+        // The space comes from the table, not from `space_advance`.
+        assert_eq!(f.glyph_metrics(' '), Some(GlyphMetrics { advance: 3, ..Default::default() }));
+        // Others are the question mark.
+        assert_eq!(f.glyph_metrics('z'), f.glyph_metrics('?'));
+        assert_eq!(f.glyph_columns('b'), Some((3, 3)));
+
+        let mut img = GlyphImage::new();
+        assert!(f.rasterize('a', &mut img));
+        assert_eq!((img.size, img.format, img.color), (Size::new(2, 2), GlyphFormat::Rgba, false));
+        let (top, bottom) = ([255, 255, 255, 255], [100, 50, 25, 128]);
+        assert_eq!(img.data, [top, top, bottom, bottom].concat());
+        // One row from the middle of the bitmap.
+        assert!(f.rasterize('b', &mut img));
+        assert_eq!(img.size, Size::new(3, 1));
+        assert_eq!(img.data, [bottom, bottom, bottom].concat());
+        assert!(!f.rasterize(' ', &mut img), "nothing to draw");
+    }
+
+    #[test]
+    fn a_glyph_table_needs_no_glyph_string() {
+        assert!(load(TABLE, 10, "######").is_some());
+        // An empty table is a font with no glyphs, not a failure.
+        let f = load("size 10\n\tbitmap f10.png\n\tglyphs\n", 10, "######").unwrap();
+        assert!(f.has_glyph_table());
+        assert_eq!(f.glyph_count(), 0);
     }
 }

@@ -12,4 +12,5 @@ turbo-ferret = { path = "../turbo-ferret", default-features = false }
 
 [dev-dependencies]
 turbo-ferret = { path = "../turbo-ferret" }
+turbo-ferret-ttf = { path = "../turbo-ferret-ttf" }
 png = "0.17"

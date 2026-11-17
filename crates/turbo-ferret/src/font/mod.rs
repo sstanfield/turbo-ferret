@@ -13,11 +13,13 @@
 pub mod backend;
 pub mod cache;
 pub mod desc;
+pub mod effect;
 pub mod manager;
 pub mod tbbf;
 
 pub use backend::{FontBackend, FontMetrics, GlyphFormat, GlyphImage, GlyphMetrics, GlyphSource, LoadCtx};
 pub use cache::{GLYPH_CACHE_PAGES, GLYPH_PAGE_SIZE, Glyph, GlyphCache};
 pub use desc::FontDesc;
+pub use effect::{FontEffect, MAX_BLUR_RADIUS};
 pub use manager::{BOX_FONT, BackgroundFont, FontFace, FontInfo, FontManager};
 pub use tbbf::{TbbfBackend, TbbfFont};

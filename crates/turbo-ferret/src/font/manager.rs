@@ -22,6 +22,7 @@ use crate::render::painter::Painter;
 use super::backend::{FontBackend, FontMetrics, GlyphMetrics, GlyphSource, LoadCtx};
 use super::cache::{GLYPH_CACHE_PAGES, GLYPH_PAGE_SIZE, GlyphCache};
 use super::desc::FontDesc;
+use super::effect::FontEffect;
 use super::tbbf::TbbfBackend;
 
 /// The built-in box font that every lookup falls back to. TB: m_test_font_desc
@@ -74,6 +75,7 @@ pub struct FontFace {
     /// `None` for the box font. A `RefCell` so measuring works through `&FontFace`.
     source: Option<RefCell<Box<dyn GlyphSource>>>,
     background: Option<BackgroundFont>,
+    effect: FontEffect,
 }
 
 impl fmt::Debug for FontFace {
@@ -90,7 +92,13 @@ impl fmt::Debug for FontFace {
 impl FontFace {
     /// TB: TBFontFace::TBFontFace
     fn new(desc: FontDesc, source: Box<dyn GlyphSource>) -> FontFace {
-        FontFace { desc, metrics: source.metrics(), source: Some(RefCell::new(source)), background: None }
+        FontFace {
+            desc,
+            metrics: source.metrics(),
+            source: Some(RefCell::new(source)),
+            background: None,
+            effect: FontEffect::default(),
+        }
     }
 
     /// The box font at `desc.size`. TB: TBFontFace::TBFontFace ("invent some metrics
@@ -98,7 +106,7 @@ impl FontFace {
     fn boxes(desc: FontDesc) -> FontFace {
         let size = i32::from(desc.size);
         let metrics = FontMetrics { ascent: size - size / 4, descent: size / 4, height: size };
-        FontFace { desc, metrics, source: None, background: None }
+        FontFace { desc, metrics, source: None, background: None, effect: FontEffect::default() }
     }
 
     /// The description this face was created for (after fallback, the face actually
@@ -133,6 +141,11 @@ impl FontFace {
 
     pub fn background(&self) -> Option<BackgroundFont> {
         self.background
+    }
+
+    /// The effect applied to this face's glyphs. TB: TBFontFace::GetEffect
+    pub fn effect(&self) -> &FontEffect {
+        &self.effect
     }
 
     /// Width of a box-font character: a box a third of the height wide, plus a pixel.
@@ -321,6 +334,23 @@ impl FontManager {
         }
     }
 
+    /// Blur the glyphs of the face for exactly `desc` by `radius` pixels (0: not at
+    /// all). Used for glows and soft shadows: register the font file under a second
+    /// name, blur that face and make it the background font of the first. Glyphs of
+    /// the face that were rendered already are rendered again. False if there is no
+    /// such face; the box font has no glyphs to blur.
+    /// TB: TBFontFace::GetEffect, TBFontEffect::SetBlurRadius
+    pub fn set_blur_radius(&mut self, desc: FontDesc, radius: u8) -> bool {
+        let Some(face) = self.faces.get_mut(&desc) else {
+            return false;
+        };
+        if face.effect.blur_radius() != radius {
+            face.effect.set_blur_radius(radius);
+            self.cache.forget_face(desc);
+        }
+        true
+    }
+
     /// The glyph cache (for inspection).
     pub fn glyph_cache(&self) -> &GlyphCache {
         &self.cache
@@ -333,13 +363,17 @@ impl FontManager {
     pub fn render_glyphs(&mut self, desc: FontDesc, text: &str) -> bool {
         let key = self.face(desc).desc;
         let FontManager { faces, cache, .. } = self;
-        let Some(src) = faces.get_mut(&key).and_then(|f| f.source.as_mut()) else {
+        let Some(face) = faces.get_mut(&key) else {
+            return true; // This is the test font
+        };
+        let FontFace { source, effect, .. } = face;
+        let Some(src) = source.as_mut() else {
             return true; // This is the test font
         };
         let src = &mut **src.get_mut();
         let mut has_all = true;
         for c in text.chars().filter(|&c| c != SKIPPED) {
-            let g = cache.render(key, c, src);
+            let g = cache.render(key, c, src, effect);
             has_all &= g.frag.is_some() || g.metrics != GlyphMetrics::default();
         }
         has_all
@@ -379,7 +413,8 @@ impl FontManager {
             None => boxes,
         };
         let metrics = face.metrics;
-        let Some(src) = face.source.as_mut() else {
+        let FontFace { source, effect, .. } = face;
+        let Some(src) = source.as_mut() else {
             draw_boxes(painter, metrics, pos, color, text);
             return;
         };
@@ -387,7 +422,7 @@ impl FontManager {
 
         // Rasterize every glyph the string needs, then upload changed pages once.
         for c in text.chars().filter(|&c| c != SKIPPED) {
-            cache.render(key, c, src);
+            cache.render(key, c, src, effect);
         }
         cache.upload(painter);
 
