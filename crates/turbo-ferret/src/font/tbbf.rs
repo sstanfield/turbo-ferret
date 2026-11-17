@@ -142,9 +142,9 @@ impl TbbfFont {
         let size_node = size_node?;
 
         // Metrics
-        let ascent = size_node.int("ascent", 0);
-        let descent = size_node.int("descent", 0);
-        let height = size_node.int("height", ascent.saturating_add(descent));
+        let ascent = metric(size_node.int("ascent", 0));
+        let descent = metric(size_node.int("descent", 0));
+        let height = metric(size_node.int("height", ascent + descent));
         let metrics = FontMetrics { ascent, descent, height };
 
         // The bitmap for the size, in the same folder as the description.
@@ -157,8 +157,8 @@ impl TbbfFont {
             return None;
         }
 
-        let x_ofs = size_node.int("x_ofs", 0);
-        let advance_delta = size_node.int("advance_delta", 0);
+        let x_ofs = metric(size_node.int("x_ofs", 0));
+        let advance_delta = metric(size_node.int("advance_delta", 0));
         let table = size_node.get("glyphs");
         let glyphs = match table {
             Some(table) => table_glyphs(table, image.size),
@@ -198,7 +198,7 @@ impl TbbfFont {
             metrics,
             x_ofs,
             advance_delta,
-            space_advance: size_node.int("space_advance", 0),
+            space_advance: metric(size_node.int("space_advance", 0)),
             rgb: node.int("info>rgb", 0) != 0,
             strip_size: image.size,
             pixels,
@@ -269,8 +269,9 @@ impl GlyphSource for TbbfFont {
 
     // TB: tb_font_renderer_tbbf.cpp TBBFRenderer::GetGlyphMetrics
     fn glyph_metrics(&mut self, c: char) -> Option<GlyphMetrics> {
-        if c == ' ' && !self.table {
-            // A strip cannot hold a space: its width is given.
+        if c == ' ' && !self.glyphs.contains_key(&' ') {
+            // A strip cannot hold a space, and a glyph table may leave it out: its
+            // width is given.
             return Some(GlyphMetrics {
                 advance: self.space_advance,
                 x: self.x_ofs,
@@ -285,7 +286,7 @@ impl GlyphSource for TbbfFont {
 
     // TB: tb_font_renderer_tbbf.cpp TBBFRenderer::RenderGlyph
     fn rasterize(&mut self, c: char, out: &mut GlyphImage) -> bool {
-        if c == ' ' && !self.table {
+        if c == ' ' && !self.glyphs.contains_key(&' ') {
             return false;
         }
         let Some(g) = self.lookup(c) else {
@@ -307,6 +308,14 @@ impl GlyphSource for TbbfFont {
     }
 }
 
+/// The largest metric a description may give (offsets, advances, ascent, descent):
+/// they are added up when text is measured and drawn.
+const MAX_METRIC: i32 = 32767;
+
+fn metric(v: i32) -> i32 {
+    v.clamp(-MAX_METRIC, MAX_METRIC)
+}
+
 /// Read a glyph table: one child per glyph, named by its code point (`U+0041`), with
 /// seven numbers: x, y, w, h in the bitmap, x and y offset, advance. Entries that do
 /// not parse or do not fit in the bitmap are left out.
@@ -321,7 +330,15 @@ fn table_glyphs(table: &ResNode, bitmap: Size) -> BTreeMap<char, Cell> {
             continue;
         };
         let n = |i: usize| v[i].as_int();
-        let cell = Cell { x: n(0), y: n(1), w: n(2), h: n(3), ofs_x: n(4), ofs_y: n(5), advance: n(6) };
+        let cell = Cell {
+            x: n(0),
+            y: n(1),
+            w: n(2),
+            h: n(3),
+            ofs_x: metric(n(4)),
+            ofs_y: metric(n(5)),
+            advance: metric(n(6)),
+        };
         let fits = cell.x >= 0
             && cell.y >= 0
             && cell.w >= 0

@@ -164,8 +164,9 @@ impl Font {
         let loca = find(b"loca")?;
         let glyf = find(b"glyf")?;
 
+        // (The specification allows 16 to 16384.)
         let units_per_em = u16_at(d, head.offset + 18)?;
-        if units_per_em == 0 {
+        if units_per_em < 16 {
             return None;
         }
         let loca_long = match i16_at(d, head.offset + 50)? {

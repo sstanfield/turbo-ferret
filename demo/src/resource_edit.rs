@@ -25,6 +25,8 @@ struct Controller {
     selected: Option<WidgetId>,
     /// The selected widget's rect in this widget's coordinates.
     selection: Option<Rect>,
+    /// The global listener that forwards to this controller.
+    forwarder: Option<ListenerId>,
 }
 
 impl Controller {
@@ -84,6 +86,13 @@ impl Widget for Controller {
     fn on_message(&mut self, cx: &mut Ctx, msg: &Message) {
         if msg.id == tbid!("update_widget_list") {
             self.update_widget_list(cx);
+        }
+    }
+
+    /// The window is gone: stop listening.
+    fn on_free(&mut self, ui: &mut Ui) {
+        if let Some(l) = self.forwarder.take() {
+            ui.remove_listener(l);
         }
     }
 
@@ -233,10 +242,13 @@ pub fn open_resource_edit_window(ui: &mut Ui, path: &str) -> Option<WidgetId> {
     let shared: SourceRef = source.clone();
     ui.with_widget::<SelectList, _>(list, |l, cx| l.set_source(cx, Some(shared)));
 
-    let ctl =
-        ui.add(win, Controller { list, edit, build, source, widgets: Vec::new(), selected: None, selection: None });
+    let ctl = ui.add(
+        win,
+        Controller { list, edit, build, source, widgets: Vec::new(), selected: None, selection: None, forwarder: None },
+    );
     ui.set_ignore_input(ctl, true);
-    ui.add_listener(Box::new(Forwarder { win, ctl, build, list, edit, scroll_container }));
+    let forwarder = ui.add_listener(Box::new(Forwarder { win, ctl, build, list, edit, scroll_container }));
+    ui.with_widget::<Controller, _>(ctl, |c, _| c.forwarder = Some(forwarder));
     ui.set_rect(win, Rect::new(100, 50, 900, 600));
 
     // Load the file into the editor.

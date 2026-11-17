@@ -344,6 +344,7 @@ impl FontManager {
         let Some(face) = self.faces.get_mut(&desc) else {
             return false;
         };
+        let radius = radius.min(super::effect::MAX_BLUR_RADIUS);
         if face.effect.blur_radius() != radius {
             face.effect.set_blur_radius(radius);
             self.cache.forget_face(desc);
@@ -433,8 +434,12 @@ impl FontManager {
             };
             if let Some(frag) = g.frag {
                 if let Some(bitmap) = cache.atlas().bitmap(frag.page) {
-                    let dst =
-                        Rect::new(x + g.metrics.x, pos.y + g.metrics.y + metrics.ascent, frag.rect.w, frag.rect.h);
+                    let dst = Rect::new(
+                        x.saturating_add(g.metrics.x),
+                        pos.y.saturating_add(g.metrics.y).saturating_add(metrics.ascent),
+                        frag.rect.w,
+                        frag.rect.h,
+                    );
                     painter.draw_bitmap(dst, frag.rect, bitmap, if g.color { Color::WHITE } else { color });
                 }
             }

@@ -66,7 +66,8 @@ mod system {
     /// question marks.
     fn tool(path: &str) -> Command {
         let mut c = Command::new(path);
-        c.env("LC_CTYPE", "UTF-8");
+        // (LC_ALL would override LC_CTYPE.)
+        c.env_remove("LC_ALL").env("LC_CTYPE", "UTF-8");
         c
     }
 
@@ -83,10 +84,10 @@ mod system {
 
     pub fn get() -> SystemText {
         match tool("/usr/bin/pbpaste").stdin(Stdio::null()).stderr(Stdio::null()).output() {
-            Ok(out) if out.status.success() => match String::from_utf8(out.stdout) {
-                Ok(t) if !t.is_empty() => SystemText::Text(t),
-                Ok(_) => SystemText::Empty,
-                Err(_) => SystemText::Unknown,
+            // (The clipboard answered: whatever it holds, it is not our old text.)
+            Ok(out) if out.status.success() => match String::from_utf8_lossy(&out.stdout) {
+                t if !t.is_empty() => SystemText::Text(t.into_owned()),
+                _ => SystemText::Empty,
             },
             _ => SystemText::Unknown,
         }

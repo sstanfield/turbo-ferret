@@ -389,3 +389,38 @@ fn id_names_are_remembered_and_collisions_reported() {
     assert!(log[0].starts_with("Warn: id collision: \"costarring\" and \"liquid\""), "{}", log[0]);
     assert_eq!(ui.id_name(TbId::new("liquid")), Some("costarring"), "the first name stays");
 }
+
+/// With two debug windows open, neither logs the other (nor what the other's own
+/// logging changes). TB ignored activity in any debug window.
+#[test]
+fn two_debug_windows_do_not_log_each_other() {
+    let mut ui = ui();
+    let col = build(&mut ui);
+    let a = ui.show_debug_window();
+    let b = ui.show_debug_window();
+    ui.set_rect(a, Rect::new(220, 0, 200, 400));
+    ui.set_rect(b, Rect::new(430, 0, 200, 400));
+    ui.update();
+    let (out_a, out_b) = (ui.find(a, tbid!("output")).unwrap(), ui.find(b, tbid!("output")).unwrap());
+    let ok = ui.find(col, tbid!("ok")).unwrap();
+    click(&mut ui, ok);
+    let line = "CLICK (Button) id: \"ok\"\n";
+    assert_eq!((ui.text(out_a), ui.text(out_b)), (Some(line), Some(line)));
+    // Activity in one debug window is in neither log.
+    let check = ui.find(b, tbid!("debug.layout_clipping")).unwrap();
+    click(&mut ui, check);
+    assert!(ui.debug_settings().layout_clipping);
+    assert_eq!((ui.text(out_a), ui.text(out_b)), (Some(line), Some(line)));
+}
+
+/// The names of ids are remembered up to a limit.
+#[test]
+fn id_names_are_capped() {
+    let mut ui = ui();
+    for i in 0..10_050 {
+        ui.name_id(&format!("generated-{i}"));
+    }
+    assert_eq!(ui.id_name(TbId::new("generated-0")), Some("generated-0"));
+    assert_eq!(ui.id_name(TbId::new("generated-9999")), Some("generated-9999"));
+    assert_eq!(ui.id_name(TbId::new("generated-10049")), None, "past the limit");
+}

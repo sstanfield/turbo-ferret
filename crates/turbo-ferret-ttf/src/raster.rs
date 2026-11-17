@@ -132,20 +132,31 @@ impl Raster {
             let xb = top.0 + (yb - top.1) * slope;
             let cover = (yb - ya) * dir;
             let (xl, xr) = if xa < xb { (xa, xb) } else { (xb, xa) };
-            let (xl, xr) = (xl.max(0.0).min(wf), xr.max(0.0).min(wf));
             let line = &mut self.acc[row * stride..(row + 1) * stride];
-            let mut col = xl as usize;
             if xr - xl < 1e-6 {
-                // Upright (or all of it outside): one piece in one cell.
-                let m = xl - col as f32;
+                // Upright: one piece in one cell (or at a border, if it is outside).
+                let x = xl.max(0.0).min(wf);
+                let col = x as usize;
+                let m = x - col as f32;
                 line[col] += cover * (1.0 - m);
                 line[col + 1] += cover * m;
                 continue;
             }
-            // Cut at the pixel borders. A piece's share of the height is its share
-            // of the width.
+            // A piece's share of the height is its share of the width.
             let per_x = cover / (xr - xl);
+            // What is left of the bitmap covers every pixel of the row: it all goes
+            // to the first cell. What is right of it covers none: it goes to the
+            // cell behind the last one, which is never read.
+            if xl < 0.0 {
+                line[0] += (xr.min(0.0) - xl) * per_x;
+            }
+            if xr > wf {
+                line[self.w] += (xr - xl.max(wf)) * per_x;
+            }
+            // The part inside, cut at the pixel borders.
+            let (xl, xr) = (xl.max(0.0), xr.min(wf));
             let mut x = xl;
+            let mut col = xl as usize;
             while x < xr && col < self.w {
                 let x_end = (col as f32 + 1.0).min(xr);
                 let h = (x_end - x) * per_x;

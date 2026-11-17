@@ -141,8 +141,9 @@ fn characters_the_font_lacks_are_reported_and_left_out() {
     let output = generate(&vera(), &opts).unwrap();
     assert_eq!(output.missing, ['\u{e000}', '\u{10ffff}']);
     let glyphs: Vec<&str> = output.description.lines().filter(|l| l.starts_with("\t\tU+")).collect();
-    assert_eq!(glyphs.len(), 2, "A and b, once each: {glyphs:?}");
-    assert!(glyphs[0].starts_with("\t\tU+0041 ") && glyphs[1].starts_with("\t\tU+0062 "));
+    assert_eq!(glyphs.len(), 3, "the space (always), A and b, once each: {glyphs:?}");
+    assert!(glyphs[0].starts_with("\t\tU+0020 "));
+    assert!(glyphs[1].starts_with("\t\tU+0041 ") && glyphs[2].starts_with("\t\tU+0062 "));
 }
 
 #[test]

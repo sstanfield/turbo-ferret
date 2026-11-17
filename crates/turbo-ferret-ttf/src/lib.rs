@@ -111,7 +111,7 @@ impl TtfFace {
         let ascent = round_i32(asc * scale);
         let descent = round_i32(-desc * scale);
         // TB: STBFontRenderer::GetMetrics
-        let height = round_i32((asc - desc + gap) * scale).max(ascent + descent);
+        let height = round_i32((asc - desc + gap) * scale).max(ascent.saturating_add(descent));
         TtfFace {
             font,
             scale,
@@ -142,15 +142,20 @@ impl TtfFace {
             advance: round_i32(f32::from(self.font.advance_width(glyph)) * self.scale),
             ..Default::default()
         };
-        if let Some(b) = self.font.glyph_bounds(glyph) {
+        // The box of the outline itself. The one in the glyph's header is wrong in
+        // some fonts (composites with turned parts), which cut such glyphs.
+        let mut bounds = BoundsSink::default();
+        self.font.outline(glyph, &mut bounds);
+        if let Some((x_min, y_min, x_max, y_max)) = bounds.get() {
             // The pixel box around the scaled outline; y flips (font units go up).
             // TB: stbtt_GetCodepointBitmapBox
             let s = self.scale;
-            let x0 = floor(f32::from(b.x_min) * s) as i32;
-            let y0 = floor(-f32::from(b.y_max) * s) as i32;
-            let x1 = ceil(f32::from(b.x_max) * s) as i32;
-            let y1 = ceil(-f32::from(b.y_min) * s) as i32;
-            if x1 > x0 && y1 > y0 && x1 - x0 <= MAX_GLYPH_SIDE && y1 - y0 <= MAX_GLYPH_SIDE {
+            let x0 = floor(x_min * s) as i32;
+            let y0 = floor(-y_max * s) as i32;
+            let x1 = ceil(x_max * s) as i32;
+            let y1 = ceil(-y_min * s) as i32;
+            let (w, h) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
+            if w > 0 && h > 0 && w <= MAX_GLYPH_SIDE && h <= MAX_GLYPH_SIDE {
                 m.x = x0;
                 m.y = y0;
                 m.w = x1 - x0;
@@ -160,6 +165,69 @@ impl TtfFace {
         self.glyphs.insert(c, (glyph, m));
         (glyph, m)
     }
+}
+
+/// Finds the box of an outline, in font units: its points, and where its curves
+/// turn.
+#[derive(Default)]
+struct BoundsSink {
+    pen: (f32, f32),
+    /// x_min, y_min, x_max, y_max, once there is a point.
+    bounds: Option<(f32, f32, f32, f32)>,
+}
+
+impl BoundsSink {
+    fn add(&mut self, x: f32, y: f32) {
+        if !(x.is_finite() && y.is_finite()) {
+            return;
+        }
+        self.bounds = Some(match self.bounds {
+            None => (x, y, x, y),
+            Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+        });
+    }
+
+    /// The box, if the outline has an area.
+    fn get(&self) -> Option<(f32, f32, f32, f32)> {
+        self.bounds.filter(|b| b.2 > b.0 && b.3 > b.1)
+    }
+}
+
+/// Where a quadratic Bézier through `p0`, `c`, `p1` turns on one axis, if it does
+/// between its ends.
+fn quad_extreme(p0: f32, c: f32, p1: f32) -> Option<f32> {
+    let d = p0 - 2.0 * c + p1;
+    if d == 0.0 {
+        return None;
+    }
+    let t = (p0 - c) / d;
+    (t > 0.0 && t < 1.0).then(|| {
+        let u = 1.0 - t;
+        u * u * p0 + 2.0 * u * t * c + t * t * p1
+    })
+}
+
+impl OutlineSink for BoundsSink {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.add(x, y);
+        self.pen = (x, y);
+    }
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.add(x, y);
+        self.pen = (x, y);
+    }
+    fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
+        let (px, py) = self.pen;
+        self.add(x, y);
+        if let Some(ex) = quad_extreme(px, cx, x) {
+            self.add(ex, py);
+        }
+        if let Some(ey) = quad_extreme(py, cy, y) {
+            self.add(px, ey);
+        }
+        self.pen = (x, y);
+    }
+    fn close(&mut self) {}
 }
 
 /// Scales an outline to pixels and feeds the rasterizer.

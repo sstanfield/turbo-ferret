@@ -54,6 +54,9 @@ pub struct FrameStats {
 /// How long a measured or arranged widget stays highlighted.
 pub(crate) const HIGHLIGHT_MS: Millis = 300;
 
+/// Most id names that are remembered.
+pub(crate) const MAX_ID_NAMES: usize = 10_000;
+
 /// Most lines the event log keeps.
 const LOG_LINES: usize = 200;
 
@@ -129,7 +132,7 @@ impl Ui {
             }
         }
         let output = self.find(win, crate::tbid!("output"));
-        let listener = self.add_listener(Box::new(EventLog { window: win, output, lines: VecDeque::new() }));
+        let listener = self.add_listener(Box::new(EventLog { output, lines: VecDeque::new() }));
         self.with_widget::<DebugWindow, _>(win, |w, _| w.listener = Some(listener));
 
         let bounds = Rect::from_size(self.rect(root).size());
@@ -253,7 +256,6 @@ impl Widget for DebugWindow {
 /// Writes the events that go by into the debug window's output field.
 /// TB: DebugSettingsWindow::OnWidgetInvokeEvent
 struct EventLog {
-    window: WidgetId,
     output: Option<WidgetId>,
     lines: VecDeque<String>,
 }
@@ -264,8 +266,10 @@ impl UiListener for EventLog {
         if ev.is_pointer() {
             return false;
         }
-        // Always ignore activity in this window
-        if target == self.window || ui.is_ancestor_of(self.window, target) {
+        // Always ignore activity in a debug window (this one or another: they
+        // would log each other's logging).
+        let in_debug_window = |w: WidgetId| ui.node(w).is_some_and(|n| n.type_name() == "DebugWindow");
+        if in_debug_window(target) || ui.parent_window(target).is_some_and(in_debug_window) {
             return false;
         }
         let Some(output) = self.output.filter(|&o| ui.exists(o)) else {

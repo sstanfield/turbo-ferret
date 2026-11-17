@@ -91,6 +91,11 @@ pub enum Error {
     NothingToDo,
     /// A size's glyphs do not fit in the largest bitmap (4096 pixels wide and high).
     TooLarge(u16),
+    /// A glyph of this size is larger than the core draws (a glyph cache page).
+    GlyphTooLarge(u16, char),
+    /// The description could not name its bitmaps with this stem: the resource
+    /// parser would read the file name as numbers.
+    BadStem(String),
 }
 
 impl fmt::Display for Error {
@@ -99,6 +104,15 @@ impl fmt::Display for Error {
             Error::NotAFont => write!(f, "not a TrueType font (fonts with PostScript outlines are not supported)"),
             Error::NothingToDo => write!(f, "no sizes, or none of the characters are in the font"),
             Error::TooLarge(size) => write!(f, "the glyphs of size {size} do not fit in a 4096 x 4096 bitmap"),
+            Error::GlyphTooLarge(size, c) => {
+                let page = turbo_ferret::font::GLYPH_PAGE_SIZE;
+                write!(
+                    f,
+                    "at size {size} the glyph U+{:04X} is larger than {} x {} pixels, the most that is drawn",
+                    *c as u32, page.w, page.h
+                )
+            }
+            Error::BadStem(stem) => write!(f, "the name {stem:?} cannot be used: it reads as a list of numbers"),
         }
     }
 }
@@ -122,6 +136,20 @@ pub fn generate(ttf: &[u8], opts: &Options) -> Result<Output, Error> {
     if chars.is_empty() || sizes.is_empty() {
         return Err(Error::NothingToDo);
     }
+    // The space comes along whether it was asked for or not: text without one
+    // would otherwise draw a question mark there.
+    if font.glyph_index(' ').is_some() && !chars.contains(&' ') {
+        chars.insert(0, ' ');
+    }
+
+    // The description names its bitmaps by this stem, and has to read back.
+    let probe = format!("{}_1.png", opts.stem);
+    let readable = opts.stem.chars().all(|c| !c.is_control())
+        && opts.stem.trim() == opts.stem
+        && matches!(turbo_ferret::Value::parse_auto(&probe), turbo_ferret::Value::Str(_));
+    if !readable || opts.stem.is_empty() {
+        return Err(Error::BadStem(opts.stem.clone()));
+    }
 
     let mut description = String::from("info\n\tgenerator turbo-ferret-fontgen\n");
     let mut bitmaps = Vec::new();
@@ -133,6 +161,13 @@ pub fn generate(ttf: &[u8], opts: &Options) -> Result<Output, Error> {
             let m = face.glyph_metrics(c).unwrap_or_default();
             let mut img = GlyphImage::new();
             let data = if face.rasterize(c, &mut img) { img.data } else { Vec::new() };
+            // A glyph with an outline but no image was too large to rasterize; one
+            // larger than a glyph cache page would never be drawn.
+            let page = turbo_ferret::font::GLYPH_PAGE_SIZE;
+            let has_outline = face.font().glyph_index(c).is_some_and(|g| face.font().glyph_bounds(g).is_some());
+            if (has_outline && data.is_empty()) || m.w > page.w || m.h > page.h {
+                return Err(Error::GlyphTooLarge(size, c));
+            }
             glyphs.push((c, m, data));
         }
         let (width, height, places) = pack(&glyphs).ok_or(Error::TooLarge(size))?;

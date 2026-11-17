@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use crate::geom::Size;
 use crate::math::{exp, sqrt};
 
-use super::backend::{GlyphFormat, GlyphImage, GlyphMetrics};
+use super::backend::{GlyphImage, GlyphMetrics};
 
 /// The largest blur radius, in pixels.
 pub const MAX_BLUR_RADIUS: u8 = 64;
@@ -57,54 +57,59 @@ impl FontEffect {
         }
     }
 
-    /// Apply the effect to a rendered glyph and adjust its metrics. Only coverage
-    /// (alpha) glyphs are blurred; color glyphs are left alone, as in TB.
+    /// Apply the effect to a rendered glyph and adjust its metrics. Color glyphs are
+    /// left alone. Coverage glyphs are blurred as in TB; glyphs that come as RGBA
+    /// without being color glyphs (bitmap fonts, which TB did not blur) have each
+    /// of their premultiplied channels blurred, so a font made by
+    /// `turbo-ferret-fontgen` blurs like the TrueType font it was made from.
     /// TB: TBFontEffect::Render
     pub(crate) fn apply(&mut self, metrics: &mut GlyphMetrics, image: &mut GlyphImage) {
         let r = self.blur_radius;
-        if r == 0 || image.format != GlyphFormat::Alpha || image.color {
+        if r == 0 || image.color {
             return;
         }
+        let bpp = image.format.bytes_per_pixel();
         let (sw, sh) = (image.size.w.max(0) as usize, image.size.h.max(0) as usize);
-        if sw == 0 || sh == 0 || image.data.len() < sw * sh {
+        if sw == 0 || sh == 0 || image.data.len() < sw * sh * bpp {
             return;
         }
         let (dw, dh) = (sw + 2 * r, sh + 2 * r);
-
-        // Horizontal pass: source rows into rows as wide as the result.
-        // TB: blurGlyph
-        self.temp.clear();
-        self.temp.resize(dw * sh, 0.0);
-        for y in 0..sh {
-            let src = &image.data[y * sw..(y + 1) * sw];
-            for x in 0..dw {
-                // Result column x is source column x - r; the kernel spans r either way.
-                let mut val = 0.0;
-                for (k, weight) in self.kernel.iter().enumerate() {
-                    // sx = x - r + (k - r)
-                    if let Some(sx) = (x + k).checked_sub(2 * r) {
-                        if sx < sw {
-                            val += f32::from(src[sx]) * weight;
-                        }
-                    }
-                }
-                self.temp[y * dw + x] = val;
-            }
-        }
-        // Vertical pass.
         self.out.clear();
-        self.out.resize(dw * dh, 0);
-        for y in 0..dh {
-            for x in 0..dw {
-                let mut val = 0.0;
-                for (k, weight) in self.kernel.iter().enumerate() {
-                    if let Some(sy) = (y + k).checked_sub(2 * r) {
-                        if sy < sh {
-                            val += self.temp[sy * dw + x] * weight;
+        self.out.resize(dw * dh * bpp, 0);
+        for ch in 0..bpp {
+            // Horizontal pass: source rows into rows as wide as the result.
+            // TB: blurGlyph
+            self.temp.clear();
+            self.temp.resize(dw * sh, 0.0);
+            for y in 0..sh {
+                let src = &image.data[y * sw * bpp..(y + 1) * sw * bpp];
+                for x in 0..dw {
+                    // Result column x is source column x - r; the kernel spans r either way.
+                    let mut val = 0.0;
+                    for (k, weight) in self.kernel.iter().enumerate() {
+                        // sx = x - r + (k - r)
+                        if let Some(sx) = (x + k).checked_sub(2 * r) {
+                            if sx < sw {
+                                val += f32::from(src[sx * bpp + ch]) * weight;
+                            }
                         }
                     }
+                    self.temp[y * dw + x] = val;
                 }
-                self.out[y * dw + x] = (val + 0.5) as u8;
+            }
+            // Vertical pass.
+            for y in 0..dh {
+                for x in 0..dw {
+                    let mut val = 0.0;
+                    for (k, weight) in self.kernel.iter().enumerate() {
+                        if let Some(sy) = (y + k).checked_sub(2 * r) {
+                            if sy < sh {
+                                val += self.temp[sy * dw + x] * weight;
+                            }
+                        }
+                    }
+                    self.out[(y * dw + x) * bpp + ch] = (val + 0.5) as u8;
+                }
             }
         }
 

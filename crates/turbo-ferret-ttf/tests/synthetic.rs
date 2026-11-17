@@ -214,7 +214,8 @@ fn rect(x0: i16, y0: i16, x1: i16, y1: i16) -> Vec<Pt> {
 /// 0: missing glyph (a small square), 1 'A': an 8x8 pixel square, 2 'B': a square on
 /// half pixels, 3 'C': a triangle, 4 'D': a square with a hole, 5 'E': a square with
 /// a square inside wound the same way, 6 'F': a round shape of off-curve points
-/// only, 7 'G': 'A' at half size moved right, plus 'B', 8 ' ': nothing.
+/// only, 7 'G': 'A' at half size moved right, plus 'B', 8 ' ': nothing, 9 'W': 'A'
+/// moved up, with a wrong box in its header.
 fn test_font(opts: Opts) -> Vec<u8> {
     let mut hole = rect(256, 256, 768, 768);
     hole.reverse();
@@ -234,9 +235,12 @@ fn test_font(opts: Opts) -> Vec<u8> {
             ..Default::default()
         },
         glyph(500, &[]),
+        // 'A' moved up by four pixels, with a header box that does not know it.
+        Glyph { advance: 500, parts: vec![(1, 0, 512, None)], bounds: Some((0, 0, 1024, 1024)), ..Default::default() },
     ];
     let mut map: Vec<(u32, u16)> = "ABCDEFG".chars().zip(1u16..).map(|(c, g)| (c as u32, g)).collect();
     map.push((' ' as u32, 8));
+    map.push(('W' as u32, 9));
     map.push((0x20AC, 2)); // the euro sign is 'B' too
     if opts.cmap12 {
         map.push((0x1F600, 3));
@@ -371,11 +375,37 @@ fn a_composite_glyph_places_its_parts() {
     assert!((area(&data) - (35.0 + 16.0)).abs() < 0.2);
 }
 
+/// The box of a glyph comes from its outline: some real fonts have composites whose
+/// header box is too small, and such glyphs were cut.
+#[test]
+fn a_wrong_header_box_does_not_cut_the_glyph() {
+    let font = Font::parse(test_font(Opts::default())).unwrap();
+    let header = font.glyph_bounds(9).unwrap();
+    assert_eq!((header.y_min, header.y_max), (0, 1024), "what the file claims");
+    let mut f = face(Opts::default(), 16);
+    let (m, data) = image(&mut f, 'W');
+    // The square is four pixels above the baseline: 4 to 12 up.
+    assert_eq!(m, GlyphMetrics { advance: 4, x: 0, y: -12, w: 8, h: 8 });
+    assert!(data.iter().all(|&a| a == 255), "all of it is drawn");
+}
+
+/// A curve's box is where the curve goes, not where its control points are.
+#[test]
+fn the_box_of_a_round_glyph_is_tight() {
+    let mut f = face(Opts::default(), 16);
+    // Control points on the corners of an 8 pixel square; the curve touches the
+    // middle of each side.
+    let (m, _) = image(&mut f, 'F');
+    assert_eq!((m.x, m.y, m.w, m.h), (0, -8, 8, 8));
+    let (m, _) = image(&mut face(Opts::default(), 160), 'F');
+    assert_eq!((m.x, m.y, m.w, m.h), (0, -80, 80, 80));
+}
+
 #[test]
 fn characters_map_to_glyphs() {
     for opts in [Opts::default(), Opts { cmap12: true, ..Default::default() }] {
         let font = Font::parse(test_font(opts)).unwrap();
-        assert_eq!(font.num_glyphs(), 9);
+        assert_eq!(font.num_glyphs(), 10);
         assert_eq!(font.glyph_index('A'), Some(1));
         assert_eq!(font.glyph_index('G'), Some(7));
         assert_eq!(font.glyph_index(' '), Some(8));

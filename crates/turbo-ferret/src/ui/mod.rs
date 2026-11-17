@@ -265,9 +265,12 @@ impl Ui {
                     self.warn(format_args!("id collision: {known:?} and {name:?} are both {}", id.0));
                 }
                 Some(_) => {}
-                None => {
+                // (Up to a limit: an app that makes ids from generated names would
+                // grow this for as long as it runs.)
+                None if self.debug.id_names.len() < crate::debug::MAX_ID_NAMES => {
                     self.debug.id_names.insert(id, alloc::string::String::from(name));
                 }
+                None => {}
             }
         }
         id
