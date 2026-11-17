@@ -9,3 +9,8 @@ include = ["src/**/*.rs", "Cargo.toml", "LICENSE", "NOTICE"]
 
 [dependencies]
 turbo-ferret = { path = "../turbo-ferret" }
+miniquad = "0.4.11"
+
+[dev-dependencies]
+# The painter example's --check mode compares GPU output against the software renderer.
+turbo-ferret-soft = { path = "../turbo-ferret-soft" }
