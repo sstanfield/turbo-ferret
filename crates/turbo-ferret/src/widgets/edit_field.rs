@@ -323,6 +323,10 @@ impl EditField {
             cx.with_widget::<ScrollBar, _>(sb, |w, cx| w.set_limits_quiet(cx, 0.0, max.y as f64, size.h as f64));
         }
         self.info.max = max;
+        // The content may have shrunk under the scroll position: bring it back in
+        // range. (TB's scroll bars did this through their change events.)
+        let s = self.edit.scroll();
+        self.edit.set_scroll_pos(s.x, s.y);
         self.sync_scroll(cx);
     }
 

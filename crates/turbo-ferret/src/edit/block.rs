@@ -162,6 +162,15 @@ impl Block {
         self.fragments.last().is_some_and(|f| f.is_break)
     }
 
+    /// Tell the environment where this block's content is (after the block moved).
+    pub(crate) fn content_moved(&self, env: &mut dyn EditEnv) {
+        for f in &self.fragments {
+            if let Some(c) = &f.content {
+                env.content_moved(c, Point::new(f.xpos, f.ypos + self.ypos));
+            }
+        }
+    }
+
     /// Tell the environment that this block's content is gone.
     pub(crate) fn release(&self, env: &mut dyn EditEnv) {
         for c in self.fragments.iter().filter_map(|f| f.content.as_ref()) {
@@ -205,7 +214,8 @@ impl Block {
 
     /// Measure fragment `i` (once per layout pass). TB: TBTextFragment::GetWidth
     fn measure_fragment(&mut self, cfg: &LayoutCfg, env: &mut dyn EditEnv, i: usize) -> i32 {
-        if self.fragments[i].width_valid {
+        // (A tab's width depends on where it is, which changes when it wraps.)
+        if self.fragments[i].width_valid && !self.fragments[i].is_tab {
             return self.fragments[i].width;
         }
         let font = cfg.font;
@@ -355,8 +365,10 @@ impl Block {
             // Now that the line totals are known: x moves by the alignment, y by the
             // fragment's baseline against the line's.
             let xofs = match self.align {
-                TextAlign::Right => cfg.layout_width - line_width,
-                TextAlign::Center => (cfg.layout_width - line_width) / 2,
+                // (Not negative: a line wider than the field starts at its left
+                // edge, or its beginning could never be scrolled into view.)
+                TextAlign::Right => (cfg.layout_width - line_width).max(0),
+                TextAlign::Center => ((cfg.layout_width - line_width) / 2).max(0),
                 TextAlign::Left => 0,
             };
             let mut adjusted_line_height = line_height;
@@ -428,8 +440,10 @@ impl Block {
     /// The offset in a fragment of the character border nearest to `x`.
     /// TB: TBTextFragment::GetCharOfs
     pub(crate) fn char_ofs(&self, cfg: &LayoutCfg, env: &mut dyn EditEnv, f: &Fragment, x: i32) -> usize {
+        // Embedded content and tabs are entered or passed whole. (TB answered 1 for
+        // both, which is inside the markup of a tag: typing there broke it.)
         if f.is_embedded() || f.is_tab {
-            return if x > f.width / 2 { f.len.min(1) } else { 0 };
+            return if x > f.width / 2 { f.len } else { 0 };
         }
         if f.is_break {
             return 0;

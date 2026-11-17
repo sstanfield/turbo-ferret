@@ -143,6 +143,26 @@ fn is_linebreak(c: u8) -> bool {
     c == b'\n' || c == b'\r'
 }
 
+/// True if `text` has a carriage return that is not followed by a line feed.
+fn has_lone_cr(text: &str) -> bool {
+    let b = text.as_bytes();
+    b.iter().enumerate().any(|(i, &c)| c == b'\r' && b.get(i + 1) != Some(&b'\n'))
+}
+
+/// `text` with every lone carriage return turned into a line feed.
+fn normalize_lone_cr(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\r' && chars.peek() != Some(&'\n') {
+            out.push('\n');
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// TB: is_wordbreak
 fn is_wordbreak(c: u8) -> bool {
     matches!(
@@ -392,6 +412,8 @@ impl StyleEdit {
                 self.layout_block(env, bi, false, false);
             }
         }
+        // The caret's line moved with it.
+        self.update_caret_pos(env);
     }
 
     fn cfg(&self) -> LayoutCfg {
@@ -421,7 +443,8 @@ impl StyleEdit {
     /// TB: TBTextOfs::SetGlobalOfs
     pub fn from_global_ofs(&self, mut gofs: usize) -> Option<TextOfs> {
         for (i, b) in self.blocks.iter().enumerate() {
-            if gofs <= b.text.len() {
+            let after_break = gofs == b.text.len() && i + 1 < self.blocks.len() && b.ends_with_break();
+            if gofs <= b.text.len() && !after_break {
                 return Some(TextOfs::new(i, floor_boundary(&b.text, gofs)));
             }
             gofs -= b.text.len();
@@ -454,6 +477,7 @@ impl StyleEdit {
     fn remove_block(&mut self, env: &mut dyn EditEnv, at: usize) {
         let block = self.blocks.remove(at);
         block.release(env);
+        self.calculate_content_width_needed = true;
         let fix = |p: &mut TextOfs| {
             if p.block > at {
                 p.block -= 1;
@@ -472,9 +496,18 @@ impl StyleEdit {
     /// TB: TBBlock::Layout + SetSize
     fn layout_block(&mut self, env: &mut dyn EditEnv, bi: usize, update_fragments: bool, propagate_height: bool) {
         let cfg = self.cfg();
-        let Some((old_w, new_w, new_h)) = self.blocks[bi].layout(&cfg, env, update_fragments) else { return };
+        // The block's place first: embedded content is told where it is during the
+        // layout.
         self.blocks[bi].ypos = if bi > 0 { self.blocks[bi - 1].ypos + self.blocks[bi - 1].height } else { 0 };
+        let Some((old_w, new_w, new_h)) = self.blocks[bi].layout(&cfg, env, update_fragments) else { return };
+        let moved_rest = propagate_height && new_h != self.blocks[bi].height;
         self.set_block_size(bi, old_w, new_w, new_h, propagate_height);
+        if moved_rest {
+            // The blocks below moved: so did their embedded content.
+            for b in &self.blocks[bi + 1..] {
+                b.content_moved(env);
+            }
+        }
         self.effects.invalidate = true;
     }
 
@@ -541,6 +574,12 @@ impl StyleEdit {
     /// Insert text into block `bi`. Returns the bytes that were inserted.
     /// TB: TBBlock::InsertText
     fn insert_in_block(&mut self, env: &mut dyn EditEnv, bi: usize, ofs: usize, text: &str, recurse: bool) -> usize {
+        if self.multiline && ofs >= self.blocks[bi].text.len() && self.blocks[bi].ends_with_break() {
+            if bi + 1 >= self.blocks.len() {
+                self.blocks.push(Block::empty(self.align));
+            }
+            return self.insert_in_block(env, bi + 1, 0, text, recurse);
+        }
         self.begin_lock_scrollbars();
         let b = text.as_bytes();
         let mut first_line_len = b.len();
@@ -646,6 +685,8 @@ impl StyleEdit {
     /// TB: TBSelection::SelectAll
     pub fn select_all(&mut self) {
         self.selection = Some((TextOfs::new(0, 0), self.last_pos()));
+        // (Nothing to select in an empty text: no selection.)
+        self.correct_selection_order();
         self.effects.invalidate = true;
     }
 
@@ -950,6 +991,16 @@ impl StyleEdit {
             let p = self.last_pos();
             self.place_caret(env, p.block, p.ofs as isize, false, false);
         }
+        // A lone carriage return is a line break of its own, but inserted in front
+        // of a line feed the two would read as one break and what follows would be
+        // reordered: lone ones become line feeds.
+        let normalized;
+        let text = if has_lone_cr(text) {
+            normalized = normalize_lone_cr(text);
+            normalized.as_str()
+        } else {
+            text
+        };
         let pos = self.caret.pos;
         let inserted = self.insert_in_block(env, pos.block, pos.ofs, text, true);
         if clear_undo_redo {
@@ -959,6 +1010,13 @@ impl StyleEdit {
             self.undo.commit(self.read_only, gofs, &text[..inserted.min(text.len())], true);
         }
         self.place_caret(env, pos.block, (pos.ofs + inserted) as isize, false, false);
+        let p = self.caret.pos;
+        if p.ofs == self.blocks[p.block].text.len()
+            && p.block + 1 < self.blocks.len()
+            && self.blocks[p.block].ends_with_break()
+        {
+            self.place_caret(env, p.block + 1, 0, false, false);
+        }
         self.caret.wanted_x = self.caret.x;
     }
 
@@ -984,9 +1042,6 @@ impl StyleEdit {
         };
         self.insert_text(env, br, false, false);
         self.avoid_line_break(env);
-        if self.caret.pos.block + 1 < self.blocks.len() {
-            self.place_caret(env, self.caret.pos.block + 1, 0, true, false);
-        }
     }
 
     /// TB: ScrollIfNeeded
@@ -1256,7 +1311,7 @@ impl StyleEdit {
             self.select(start, self.caret.pos);
             self.remove_selection(env);
         } else {
-            self.set_caret_global_ofs(env, e.gofs, true, true);
+            self.set_caret_global_ofs(env, e.gofs, false, false);
             self.insert_text(env, &e.text, false, false);
             if e.text.len() > 1 {
                 self.select_global(e.gofs, e.gofs + e.text.len());
