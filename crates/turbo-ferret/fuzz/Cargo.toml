@@ -1,0 +1,41 @@
+# Fuzz targets for the PNG decoder and its inflater. Not a workspace member (the root
+# Cargo.toml excludes this directory). Run with a nightly toolchain:
+#
+#   cargo +nightly fuzz run png_decode
+#   cargo +nightly fuzz run inflate
+#
+# Seed the png_decode corpus with `resources/**/*.png` for much better coverage:
+#
+#   mkdir -p corpus/png_decode && find ../../../resources -name '*.png' -exec cp {} corpus/png_decode/ \;
+
+[package]
+name = "turbo-ferret-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Its own workspace root. The root manifest's `exclude` alone is not enough: Cargo
+# treats anything under a member's directory (crates/turbo-ferret) as a member.
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+turbo-ferret = { path = "..", default-features = false, features = ["png"] }
+
+[[bin]]
+name = "inflate"
+path = "fuzz_targets/inflate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "png_decode"
+path = "fuzz_targets/png_decode.rs"
+test = false
+doc = false
+bench = false
