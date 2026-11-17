@@ -52,7 +52,12 @@ fn demo_renders_headless() {
 fn demo_test_windows_headless() {
     let size = Size::new(1024, 700);
     let mut demo = Demo::new(&default_resource_root(), size, 96);
-    for f in ["test_skin_conditions01.tb.txt", "test_skin_conditions02.tb.txt", "test_layout01.tb.txt", "test_connections.tb.txt"] {
+    for f in [
+        "test_skin_conditions01.tb.txt",
+        "test_skin_conditions02.tb.txt",
+        "test_layout01.tb.txt",
+        "test_connections.tb.txt",
+    ] {
         assert!(open_resource_window(&mut demo.ui, &format!("demo01/ui_resources/{f}")).is_some(), "{f}");
     }
     demo.frame(0);

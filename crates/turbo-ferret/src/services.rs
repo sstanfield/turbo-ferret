@@ -209,7 +209,9 @@ pub type LogSink = fn(Level, fmt::Arguments<'_>);
 
 #[cfg(feature = "std")]
 pub fn stderr_log(level: Level, args: fmt::Arguments<'_>) {
-    std::eprintln!("[turbo-ferret {level:?}] {args}");
+    if level >= Level::Info {
+        std::eprintln!("[turbo-ferret {level:?}] {args}");
+    }
 }
 
 // ---------------------------------------------------------------------------

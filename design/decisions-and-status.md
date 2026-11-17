@@ -51,7 +51,7 @@ Nothing blocking. Implementation notes and the deviations made while implementin
 | M1 Tree and dispatch | Done | `ui/` (tree, `Ctx`, take-out hooks, detach-now/free-at-flush, die, listeners, bubbling, pointer/wheel/key/touch, capture, hover, focus, windows, Tab, long click, messages, value binding). `tests/m1_tree.rs` |
 | M2 Layout and inflation | Done | `layout/` (size types, `stack.rs`, `dim.rs`), measure cache, `reader.rs` (registry, generic properties, inflation). `tests/m2_layout.rs`; every demo01 layout inflates |
 | M3 Rendering, skin, fonts | Done | `render/` (renderer trait, painter, atlas), `skin/`, `font/` (TBBF, manager, glyph cache), `paint.rs`, hand-rolled `image/` (PNG + inflate, byte-identical to the `png` crate on all 146 resource PNGs, fuzzed), `turbo-ferret-soft`, goldens in `tests/golden/` |
-| M4 Basic widgets, animation, demo | Done (see the miniquad note) | `widgets/` (TextField, Button, ClickLabel, SkinImage, Separator, ProgressSpinner, CheckBox, RadioButton, ScrollBar, Slider, Container, Layout, Mover, Resizer, Dimmer, Window), `anim.rs`, `demo/` |
+| M4 Basic widgets, animation, demo | Done: `cargo run -p turbo-ferret-demo` (ran on macOS, GL, 2560x1600 at 192 dpi) | `widgets/` (TextField, Button, ClickLabel, SkinImage, Separator, ProgressSpinner, CheckBox, RadioButton, ScrollBar, Slider, Container, Layout, Mover, Resizer, Dimmer, Window), `anim.rs`, `demo/` |
 
 ### Deviations from port-design.md made during implementation
 
@@ -76,7 +76,8 @@ Each keeps TB's behaviour or fixes a problem found while porting; none adds a de
 
 - Core: none. Dev-only: `png` (oracle for the PNG decoder tests, and writing golden images).
 - `turbo-ferret-soft`: `turbo-ferret` only.
-- `turbo-ferret-miniquad`: `miniquad` (decision 9; it only pulls platform system crates).
+- `turbo-ferret-miniquad`: `miniquad 0.4.11` (decision 9; it only pulls platform system crates: libc, objc-rs, malloc_buf, ndk-sys, winapi). Dev-only: `turbo-ferret-soft`, which the painter example's `--check` mode uses as the reference image (GL output matches it within 1 per channel).
+- `demo` (not published): the three crates plus `miniquad`; dev-only `png` for the headless screenshots.
 
 
 ---

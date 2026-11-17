@@ -171,6 +171,13 @@ impl Ui {
         &self.config
     }
 
+    /// Change the platform metrics (for example after the window moved to a screen
+    /// with another DPI). Reload the skin to pick up DPI variants.
+    pub fn set_config(&mut self, config: Config) {
+        self.config = config;
+        self.repaint = true;
+    }
+
     pub fn services_mut(&mut self) -> &mut Services {
         &mut self.services
     }

@@ -141,6 +141,7 @@ dependencies = [
 name = "turbo-ferret-demo"
 version = "0.1.0"
 dependencies = [
+ "miniquad",
  "png",
  "turbo-ferret",
  "turbo-ferret-miniquad",

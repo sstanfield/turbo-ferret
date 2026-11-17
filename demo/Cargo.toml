@@ -18,6 +18,7 @@ path = "src/main.rs"
 turbo-ferret = { path = "../crates/turbo-ferret" }
 turbo-ferret-soft = { path = "../crates/turbo-ferret-soft" }
 turbo-ferret-miniquad = { path = "../crates/turbo-ferret-miniquad" }
+miniquad = "0.4.11"
 
 [dev-dependencies]
 png = "0.17"
