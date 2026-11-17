@@ -88,6 +88,12 @@ impl Window {
         Some(id) == self.mover || Some(id) == self.resizer
     }
 
+    /// TB: TBWindow::SetSettings
+    pub fn set_settings(&mut self, cx: &mut Ctx, s: WindowSettings) {
+        self.settings = s;
+        self.apply_settings(cx);
+    }
+
     /// TB: TBWindow::SetSettings (hidden parts are made `Gone`).
     fn apply_settings(&self, cx: &mut Ctx) {
         let me = cx.this();
@@ -116,6 +122,46 @@ impl Window {
         }
     }
 }
+
+/// The `Widget` methods of a window, forwarded to a `Window` field, for widgets that
+/// are windows with something added (TB: TBWindow subclasses). The widget writes
+/// `type_name`, `on_create`, `on_event`, `on_die` and what else it changes itself.
+macro_rules! forward_to_window {
+    ($field:ident) => {
+        fn extra_padding(&self, this: $crate::ui::NodeRef<'_>) -> $crate::geom::Edges {
+            self.$field.extra_padding(this)
+        }
+        fn measure_adds_skin(&self) -> bool {
+            self.$field.measure_adds_skin()
+        }
+        fn measure_content(
+            &mut self,
+            cx: &mut $crate::ui::Ctx,
+            sc: $crate::layout::size::SizeConstraints,
+        ) -> $crate::layout::size::PreferredSize {
+            self.$field.measure_content(cx, sc)
+        }
+        fn arrange(&mut self, cx: &mut $crate::ui::Ctx, old: $crate::geom::Size, new: $crate::geom::Size) {
+            self.$field.arrange(cx, old, new)
+        }
+        fn on_child_added(&mut self, cx: &mut $crate::ui::Ctx, child: $crate::arena::WidgetId) {
+            self.$field.on_child_added(cx, child)
+        }
+        fn on_window_active_changed(&mut self, cx: &mut $crate::ui::Ctx, active: bool) {
+            self.$field.on_window_active_changed(cx, active)
+        }
+        fn on_added(&mut self, cx: &mut $crate::ui::Ctx) {
+            self.$field.on_added(cx)
+        }
+        fn text(&self) -> Option<&str> {
+            self.$field.text()
+        }
+        fn set_text(&mut self, cx: &mut $crate::ui::Ctx, text: &str) {
+            self.$field.set_text(cx, text)
+        }
+    };
+}
+pub(crate) use forward_to_window;
 
 impl Widget for Window {
     fn type_name(&self) -> &'static str {
@@ -272,10 +318,7 @@ impl Widget for Window {
 impl Ui {
     /// Set a window's settings (title bar, resizer, close button, activation).
     pub fn set_window_settings(&mut self, win: WidgetId, s: WindowSettings) {
-        self.with_widget::<Window, _>(win, |w, cx| {
-            w.settings = s;
-            w.apply_settings(cx);
-        });
+        self.with_widget::<Window, _>(win, |w, cx| w.set_settings(cx, s));
     }
 
     /// The rect a window would get from `resize_to_fit_content`. TB: GetResizeToFitContentRect

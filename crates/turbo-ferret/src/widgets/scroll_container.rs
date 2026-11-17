@@ -175,6 +175,12 @@ impl ScrollContainer {
         ScrollContainer { mode, ..Default::default() }
     }
 
+    /// See `set_adapt_content_size`.
+    pub fn with_adapt_content_size(mut self, adapt: bool) -> ScrollContainer {
+        self.adapt_content = adapt;
+        self
+    }
+
     pub fn scroll_mode(&self) -> ScrollMode {
         self.mode
     }

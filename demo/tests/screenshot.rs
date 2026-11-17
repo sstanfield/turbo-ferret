@@ -170,3 +170,119 @@ fn demo_m5_windows_headless() {
     run(&mut demo, 400);
     shot(&mut demo, &mut soft, "demo_m5_tabs_right.png");
 }
+
+/// M6: lists, dropdown and popup menus, message windows.
+#[test]
+fn demo_m6_windows_headless() {
+    use turbo_ferret::widgets::{MenuWindow, MessageWindow, SelectDropdown, SelectItemSource, SelectList};
+    let size = Size::new(1280, 800);
+    let mut demo = Demo::new(&default_resource_root(), size, 96);
+    let main = demo.main.unwrap();
+    let root = demo.ui.root();
+    let mut soft = SoftRenderer::new(size);
+    let run = |demo: &mut Demo, ms: u64| {
+        for _ in 0..ms / 16 {
+            let t = demo.ui.now() + 16;
+            demo.frame(t);
+        }
+    };
+    let click = |demo: &mut Demo, w: WidgetId| {
+        let r = demo.ui.rect(w);
+        let p = demo.ui.to_root(w, Point::new(r.w / 2, r.h / 2));
+        demo.ui.pointer_down(p, 1, Modifiers::NONE);
+        demo.ui.pointer_up(p, Modifiers::NONE);
+    };
+    let top = |demo: &Demo| *demo.ui.children(root).last().unwrap();
+    let item = |demo: &Demo, list: WidgetId, index: i32| {
+        demo.ui.get::<SelectList>(list).unwrap().item_widget(&demo.ui, index).expect("item")
+    };
+    run(&mut demo, 500);
+    shot(&mut demo, &mut soft, "demo_m6_start.png");
+
+    // The two list windows are open and filled from the shared sources.
+    let lists: Vec<WidgetId> =
+        demo.ui.children(root).iter().filter_map(|&w| demo.ui.find_as::<SelectList>(w, tbid!("list"))).collect();
+    assert_eq!(lists.len(), 2);
+    let layout = demo.ui.get::<SelectList>(lists[0]).unwrap().item_layout().unwrap();
+    assert_eq!(demo.ui.children(layout).len(), 100);
+    assert_eq!(demo.ui.text(demo.ui.children(layout)[0]), Some("Adam"));
+
+    // Checking a customized item changes the shared source.
+    let row = item(&demo, lists[1], 0);
+    let check = demo.ui.find(row, tbid!("check")).unwrap();
+    click(&mut demo, check);
+    assert!(demo.sources.advanced.borrow().item(0).unwrap().checked);
+    let n = demo.sources.advanced.borrow().num_items();
+    let del = demo.ui.find(row, tbid!("delete")).unwrap();
+    click(&mut demo, del);
+    assert_eq!(demo.sources.advanced.borrow().num_items(), n - 1);
+    run(&mut demo, 100);
+
+    // The scroll container window: a dropdown opens its menu below it.
+    click_id(&mut demo, main, tbid!("test-scroll-container"));
+    run(&mut demo, 400);
+    let scw = top(&demo);
+    let drop = demo.ui.find_as::<SelectDropdown>(scw, tbid!("name dropdown")).unwrap();
+    assert_eq!(demo.ui.text(drop), Some("Maja"), "the source's first item");
+    click(&mut demo, drop);
+    run(&mut demo, 300);
+    let menu = top(&demo);
+    let list = demo.ui.get::<MenuWindow>(menu).expect("a menu window").list().unwrap();
+    shot(&mut demo, &mut soft, "demo_m6_dropdown.png");
+    // The list is scrolled to the selected name (the last visible one); choose the
+    // one before it.
+    let layout = demo.ui.get::<SelectList>(list).unwrap().item_layout().unwrap();
+    let selected = item(&demo, list, 0);
+    let kids = demo.ui.children(layout).to_vec();
+    let next = kids[kids.iter().position(|&c| c == selected).unwrap() - 1];
+    let name = demo.ui.text(next).unwrap().to_string();
+    assert_ne!(name, "Maja");
+    click(&mut demo, next);
+    assert_eq!(demo.ui.text(drop), Some(name.as_str()));
+    run(&mut demo, 400);
+    assert!(!demo.ui.exists(menu));
+
+    // The popup menu with a sub menu; choosing in the sub menu shows a message.
+    let button = demo.ui.find(scw, tbid!("showpopupmenu1")).unwrap();
+    click(&mut demo, button);
+    run(&mut demo, 300);
+    let menu = top(&demo);
+    let list = demo.ui.get::<MenuWindow>(menu).expect("the popup menu").list().unwrap();
+    let long = item(&demo, list, 4);
+    click(&mut demo, long);
+    run(&mut demo, 300);
+    let submenu = top(&demo);
+    assert!(submenu != menu);
+    shot(&mut demo, &mut soft, "demo_m6_menu.png");
+    let sublist = demo.ui.get::<MenuWindow>(submenu).unwrap().list().unwrap();
+    let layout = demo.ui.get::<SelectList>(sublist).unwrap().item_layout().unwrap();
+    let first = demo.ui.children(layout)[0];
+    click(&mut demo, first);
+    run(&mut demo, 400);
+    assert!(!demo.ui.exists(menu) && !demo.ui.exists(submenu));
+    let msg = top(&demo);
+    assert!(demo.ui.get::<MessageWindow>(msg).is_some());
+    assert_eq!(demo.ui.text(msg), Some("Info"));
+    shot(&mut demo, &mut soft, "demo_m6_message.png");
+    click_id(&mut demo, msg, tbid!("TBMessageWindow.ok"));
+    run(&mut demo, 400);
+    assert!(!demo.ui.exists(msg));
+
+    // Closing the main window asks first, behind a dimmer.
+    demo.ui.activate_window(main);
+    run(&mut demo, 50);
+    click_id(&mut demo, main, tbid!("TBWindow.close"));
+    run(&mut demo, 400);
+    let confirm = top(&demo);
+    assert_eq!(demo.ui.text(confirm), Some("Are you sure?"));
+    shot(&mut demo, &mut soft, "demo_m6_confirm.png");
+    click_id(&mut demo, confirm, tbid!("TBMessageWindow.no"));
+    run(&mut demo, 400);
+    assert!(demo.ui.exists(main) && !demo.ui.exists(confirm));
+    click_id(&mut demo, main, tbid!("TBWindow.close"));
+    run(&mut demo, 400);
+    let confirm = top(&demo);
+    click_id(&mut demo, confirm, tbid!("TBMessageWindow.yes"));
+    run(&mut demo, 600);
+    assert!(!demo.ui.exists(main));
+}

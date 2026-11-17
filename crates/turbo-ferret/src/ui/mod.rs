@@ -331,12 +331,17 @@ impl Ui {
     pub fn content_root(&self, id: WidgetId) -> WidgetId {
         let mut cur = id;
         for _ in 0..16 {
-            match self.tree.live(cur).and_then(|n| n.behaviour.as_deref()).and_then(|b| b.content_root()) {
+            match self.tree.content_root(cur) {
                 Some(c) if c != cur && self.tree.is_live(c) => cur = c,
                 _ => break,
             }
         }
         cur
+    }
+
+    /// The topmost ancestor of `id` (the root, if it is attached). TB: GetParentRoot
+    pub fn parent_root(&self, id: WidgetId) -> WidgetId {
+        self.tree.parent_root(id)
     }
 
     /// Nearest window containing `id` (self included).

@@ -15,18 +15,34 @@ use super::listen::ListenerId;
 use super::node::{Node, NodeFlags, NodeRef};
 use super::scroller::Scroller;
 
-/// What scroll queries answer about a node while its behaviour is taken out.
+/// What queries answer about a node while its behaviour is taken out (its hook is
+/// running). Only kept for nodes that answer something other than the default.
 #[derive(Copy, Clone, Default)]
-pub(crate) struct BusyScroll {
+pub(crate) struct BusyState {
     pub info: Option<ScrollInfo>,
     pub translation: Point,
-    pub root: Option<WidgetId>,
+    pub scroll_root: Option<WidgetId>,
+    pub content_root: Option<WidgetId>,
+    /// `Some` if events bubble somewhere else than to the parent.
+    pub event_dest: Option<Option<WidgetId>>,
 }
 
-impl BusyScroll {
-    pub fn of(b: &dyn crate::widget::Widget) -> Option<BusyScroll> {
-        let s = BusyScroll { info: b.scroll_info(), translation: b.child_translation(), root: b.scroll_root() };
-        (s.info.is_some() || s.translation != Point::ZERO || s.root.is_some()).then_some(s)
+impl BusyState {
+    pub fn of(n: NodeRef<'_>, b: &dyn crate::widget::Widget) -> Option<BusyState> {
+        let dest = b.event_destination(n);
+        let s = BusyState {
+            info: b.scroll_info(),
+            translation: b.child_translation(),
+            scroll_root: b.scroll_root(),
+            content_root: b.content_root(),
+            event_dest: (dest != n.parent()).then_some(dest),
+        };
+        let default = s.info.is_none()
+            && s.translation == Point::ZERO
+            && s.scroll_root.is_none()
+            && s.content_root.is_none()
+            && s.event_dest.is_none();
+        (!default).then_some(s)
     }
 }
 
@@ -37,7 +53,7 @@ pub(crate) struct Tree {
     pub scrollers: SideTable<Scroller>,
     /// Scroll info and child translation of nodes whose hook is running (their
     /// behaviour is taken out, so it cannot be asked). Filled by `call_hook`.
-    pub busy_scroll: SideTable<BusyScroll>,
+    pub busy: SideTable<BusyState>,
     pub connections: SideTable<TbId>,
     pub widget_listeners: SideTable<Vec<ListenerId>>,
     pub last_focus: SideTable<WidgetId>,
@@ -52,7 +68,7 @@ impl Tree {
             root,
             layout_params: SideTable::new(),
             scrollers: SideTable::new(),
-            busy_scroll: SideTable::new(),
+            busy: SideTable::new(),
             connections: SideTable::new(),
             widget_listeners: SideTable::new(),
             last_focus: SideTable::new(),
@@ -85,7 +101,24 @@ impl Tree {
     pub fn scroll_info(&self, id: WidgetId) -> Option<ScrollInfo> {
         match &self.live(id)?.behaviour {
             Some(b) => b.scroll_info(),
-            None => self.busy_scroll.get(id).and_then(|c| c.info),
+            None => self.busy.get(id).and_then(|c| c.info),
+        }
+    }
+
+    /// Where children added to `id` go (one step; `None` = `id` itself).
+    pub fn content_root(&self, id: WidgetId) -> Option<WidgetId> {
+        match &self.live(id)?.behaviour {
+            Some(b) => b.content_root(),
+            None => self.busy.get(id).and_then(|c| c.content_root),
+        }
+    }
+
+    /// Where unhandled events bubble from `id`. TB: GetEventDestination
+    pub fn event_destination(&self, id: WidgetId) -> Option<WidgetId> {
+        let n = self.node_ref(id)?;
+        match n.behaviour() {
+            Some(b) => b.event_destination(n),
+            None => self.busy.get(id).and_then(|c| c.event_dest).unwrap_or(n.parent()),
         }
     }
 
@@ -93,7 +126,7 @@ impl Tree {
     pub fn scroll_root(&self, id: WidgetId) -> WidgetId {
         let root = match self.live(id).map(|n| &n.behaviour) {
             Some(Some(b)) => b.scroll_root(),
-            Some(None) => self.busy_scroll.get(id).and_then(|c| c.root),
+            Some(None) => self.busy.get(id).and_then(|c| c.scroll_root),
             None => None,
         };
         root.unwrap_or(id)
@@ -105,7 +138,7 @@ impl Tree {
         match self.live(id) {
             Some(n) => match &n.behaviour {
                 Some(b) => b.child_translation(),
-                None => self.busy_scroll.get(id).map(|c| c.translation).unwrap_or_default(),
+                None => self.busy.get(id).map(|c| c.translation).unwrap_or_default(),
             },
             None => Point::ZERO,
         }

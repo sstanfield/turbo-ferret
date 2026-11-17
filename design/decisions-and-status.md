@@ -1,6 +1,6 @@
 # Turbo Ferret (Rust port of Turbo Badger): Decisions and Status
 
-*Hand-off notes so that work can resume without re-asking. Last updated 2026-11-17 (M0 to M5 implemented). This file is the record.*
+*Hand-off notes so that work can resume without re-asking. Last updated 2026-11-17 (M0 to M6 implemented). This file is the record.*
 
 ## Where things stand
 
@@ -10,7 +10,7 @@
 | 2. Assess ECS-style widget storage | Done, agreed | [ecs-widget-storage-assessment.md](ecs-widget-storage-assessment.md): verdict, option C, `no_std` costs, questions `M-01` to `M-08` |
 | 3. Mutability design | Done, agreed (five decisions below) | This file, section "Mutability" |
 | 4. Full port design | Done, accepted by Steve 2026-11-17 | [port-design.md](port-design.md): crates, core types, traits, event/layout/paint flow, milestones M0 to M8 |
-| 5. Implementation with Claude Code | M0 to M5 done 2026-11-17 (see "Implementation status" below). Next: M6 | Workspace in the repo root |
+| 5. Implementation with Claude Code | M0 to M6 done 2026-11-17 (see "Implementation status" below). Next: M7 | Workspace in the repo root |
 
 **Original project:** Turbo Badger by Emil Segerås, zlib licence (copyright 2011 to 2014, see `src/tb/tb_core.h`). The port must credit it and ship its notice: see port-design.md section 0.
 
@@ -53,6 +53,7 @@ Nothing blocking. Implementation notes and the deviations made while implementin
 | M3 Rendering, skin, fonts | Done | `render/` (renderer trait, painter, atlas), `skin/`, `font/` (TBBF, manager, glyph cache), `paint.rs`, hand-rolled `image/` (PNG + inflate, byte-identical to the `png` crate on all 146 resource PNGs, fuzzed), `turbo-ferret-soft`, goldens in `tests/golden/` |
 | M4 Basic widgets, animation, demo | Done: `cargo run -p turbo-ferret-demo` (ran on macOS, GL, 2560x1600 at 192 dpi) | `widgets/` (TextField, Button, ClickLabel, SkinImage, Separator, ProgressSpinner, CheckBox, RadioButton, ScrollBar, Slider, Container, Layout, Mover, Resizer, Dimmer, Window), `anim.rs`, `demo/` |
 | M5 Scrolling and containers | Done | `ui/scroller.rs` (kinetic and smooth scrolling stepped by `update`, pan tracking, snap), panning in `ui/input.rs`, `widgets/scroll_container.rs`, `widgets/tab_container.rs`, `widgets/toggle.rs` (ToggleContainer, SectionHeader, Section), the overflow fade-out in `widgets/layout.rs`. `tests/m5_scroll.rs`, `tests/m5_containers.rs`, goldens `scroll_container`, `tab_container`, `sections`, `layout_fadeout`. The demo uses TB's own main window and has the scroll container, page (snap), toggle and tab windows |
+| M6 Lists and popups | Done | `widgets/select_item.rs` (`SelectItemSource`, `StringItemSource`, default item widgets), `widgets/select.rs` (SelectList, SelectDropdown), `widgets/popup.rs` (PopupAlignment, PopupWindow, MenuWindow), `widgets/message_window.rs`, `widgets/inline_select.rs`. `tests/m6_lists.rs`, goldens `select_list`, `dropdown_menu`, `message_window`. The demo has TB's list and customized-list windows, the dropdowns, the popup menu with sub menus and the message windows |
 
 ### Deviations from port-design.md made during implementation
 
@@ -71,9 +72,9 @@ Each keeps TB's behaviour or fixes a problem found while porting; none adds a de
 11. **`Color` is a struct of four `u8`s** (straight alpha) rather than `Color(u32)`.
 12. **The skin condition target `ancestors`** no longer falls through to `prev sibling` (a missing `break` in TB).
 13. **Busy semantics, as designed, with these visible effects:** a widget's own `on_event` is not called for events it emits from its own hooks; a widget that removes itself from its own hook gets no `on_removed`; a parent that adds or removes children from its own hook gets no `on_child_added`/`on_child_removed`.
-14. *(Gone with M5: the demo main window is TB's `test_ui.tb.txt`.)* The demo shows message results in the main window's title until `MessageWindow` exists (M6).
+14. *(Gone with M5: the demo main window is TB's `test_ui.tb.txt`.)* 
 
-Added with M5:
+Added with M5 (15 to 22) and M6 (23 to 31):
 
 15. **`Changed` events always carry the new value in `ev.value`** (the design kept it only for widgets with a value connection). Handlers up the chain need it: they cannot read the value back from the sender, which is busy while it fires the event. A scroll container gets its scroll bar's position this way, and a section its header's state.
 16. **A busy widget still answers the queries others depend on.** While a hook runs, `scroll_info`, `child_translation` and `scroll_root` are answered from a copy taken when the hook started (side table `busy_scroll`, filled only for scrollable widgets), and `axis` and `align` from the node (refreshed when the behaviour is put back, like `extra_padding`). Without this, a container that inflates or measures children from its own hook gave them the wrong skin (conditions such as `ancestors align` and `parent axis` saw defaults) and a scroll started from the widget's own key handler jumped. `Ctx::publish(self)` refreshes the copies in the middle of a hook. Still not covered: skin conditions on the `value` or a custom property of a busy widget see the default until its hook returns.
@@ -83,6 +84,15 @@ Added with M5:
 20. **`ScrollContainer` keeps its own `ScrollInfo` and pushes the position into its root child**, which translates and clips. TB's root read the scroll bars of its parent while painting. The container sets its scroll bars with `set_value_quiet`/`set_limits_quiet` (no `Changed` event), since it is the one changing them.
 21. **TB subclasses became composition:** `TBTabLayout` is a `Layout` in the tab role (`Layout::tab_layout()`), `SectionHeader` wraps a `Button` and delegates to it. `Section` handles the header's `Changed` event as it bubbles; TB's header called its section from its own `OnEvent`, which a busy widget cannot do here (deviation 13).
 22. **`Ui::inflate_properties(widget, node)`** applies a node's properties to an existing widget (TB called `OnInflate` on it); the tab container uses it for its `tabs`, `content` and `root` nodes. Known gap: inside those three nodes a local reference (`@>path`) resolves against that node, not against the whole file. `@tree>` references and language strings work as elsewhere.
+23. **Item sources are shared and polled, not registered.** The design said "`SelectItemSource` with viewer IDs". A source is an `Rc<RefCell<dyn SelectItemSource>>` that embeds a change counter (`SourceChanges`); each viewer compares it with the last value it saw when it is processed, and rebuilds its list, or replaces one item's widget for a single `item_changed`. Nothing registers or unregisters, the default source of a list is simply owned by it, and changes show at the next `update()` (TB validated lists at the next process too). List widgets only use `try_borrow`: a source that the application holds mutably during an update is read at the next one, never a panic.
+24. **`create_item_widget(&self, ui, index, viewer)` returns an unattached widget** (made with `ui.create`) and the viewer adds it. The source is borrowed while it runs.
+25. **A sub menu's source is held weakly by its item** (`StringItem::sub_source`), as TB's raw pointer did not own it. A source may therefore refer to itself (the demo's "Same submenu") without a cycle; the application keeps sources alive.
+26. **More answers for busy widgets** (extends 16): `event_destination` and `content_root` are also answered from the copy taken when a hook starts (side table `busy`). A menu or message window sends its click through its target from inside its own `on_event`; without this the click went to the root instead.
+27. **Clicks from lists and menus carry the item's index in `ev.value`** (and its id in `ref_id`, as in TB). The dropdown takes the index from the event: it cannot read the list, which is busy sending it.
+28. **Popup, menu and message windows hold a `Window` and forward to it** (`forward_to_window!`), where TB subclassed TBWindow. Their listener side is a small `TargetWatcher` registered as a global listener and removed in `on_removed`. They are shown with `ui.show_popup`, `ui.show_menu` (or `create_menu` + `show_menu_window` to change the skin first) and `ui.show_message`.
+29. **A press that hits no widget is reported to global listeners** as a `PointerDown` at the root, so popups close on a press on the bare root too. TB sent no event in that case and left them open.
+30. **Lists and dropdowns inflated without `value` select their first item**, as TB's generic `OnInflate` set the value to 0 when none was given. (The port still applies `value` only when it is present; for every other widget 0 is the default anyway.) A menu's initial selection is set without a `Changed` event; TB sent one through the menu's target.
+31. **Stand-ins until the edit field exists (M7):** a message window shows its text in a small wrapped-text widget and drops styling tags; `InlineSelect` shows its number in a text field, so it cannot be typed into and takes no keyboard focus; in the demo the list filter fields and the "add name" field are missing (`SelectList::set_filter` works, and "Add" adds a generated name).
 
 ### Dependencies
 

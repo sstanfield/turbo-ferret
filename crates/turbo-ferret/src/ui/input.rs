@@ -261,7 +261,21 @@ impl Ui {
                 }
             }
         }
-        let Some(cap) = self.input.captured else { return false };
+        let Some(cap) = self.input.captured else {
+            // Nothing was hit. Global listeners still hear about the press, as a
+            // pointer down at the root, so popups close on a press on the bare root
+            // too. (TB sent no event at all, and its popups stayed open.)
+            let ids = self.listeners.global.clone();
+            if !ids.is_empty() {
+                let root = self.root();
+                let mut ev = Event::new(EventKind::PointerDown, root).at(p);
+                ev.count = clicks;
+                ev.mods = mods;
+                ev.touch = touch;
+                self.call_listeners(&ids, |l, ui| l.on_event(ui, root, &ev));
+            }
+            return false;
+        };
         if self.stop_scrollers_above(cap) {
             self.input.cancel_click = true;
         }

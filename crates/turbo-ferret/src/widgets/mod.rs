@@ -1,20 +1,33 @@
 //! Built-in widgets, one file each.
 
 pub mod button;
+pub mod inline_select;
 pub mod layout;
+pub mod message_window;
 pub mod misc;
+pub mod popup;
 pub mod scroll;
 pub mod scroll_container;
+pub mod select;
+pub mod select_item;
 pub mod tab_container;
 pub mod text;
 pub mod toggle;
 pub mod window;
 
 pub use button::{Button, ClickLabel};
+pub use inline_select::InlineSelect;
 pub use layout::Layout;
+pub use message_window::{MessageButtons, MessageSettings, MessageWindow};
 pub use misc::{CheckBox, Dimmer, Mover, ProgressSpinner, RadioButton, Resizer, Separator, SkinImage};
+pub use popup::{MenuWindow, PopupAlignment, PopupWindow};
 pub use scroll::{ScrollBar, Slider};
 pub use scroll_container::{ScrollBarVisibility, ScrollContainer, ScrollContainerRoot, ScrollMode};
+pub use select::{SelectDropdown, SelectList};
+pub use select_item::{
+    SelectItemSource, SelectItemWidget, Sort, SourceChanges, SourceRef, SourceUpdate, StringItem, StringItemSource,
+    WeakSourceRef, create_default_item_widget,
+};
 pub use tab_container::TabContainer;
 pub use text::{TextAlign, TextField};
 pub use toggle::{Section, SectionHeader, Toggle, ToggleContainer};
@@ -103,4 +116,17 @@ pub(crate) fn register_builtins(ui: &mut Ui) {
         Factory::of::<SectionHeader>("SectionHeader").sync(ValueKind::Int),
     );
     register_both(ui, "TBSection", "Section", Factory::of::<Section>("Section").sync(ValueKind::Int));
+    register_both(ui, "TBSelectList", "SelectList", Factory::of::<SelectList>("SelectList").sync(ValueKind::Int));
+    register_both(
+        ui,
+        "TBSelectDropdown",
+        "SelectDropdown",
+        Factory::of::<SelectDropdown>("SelectDropdown").sync(ValueKind::Int),
+    );
+    register_both(
+        ui,
+        "TBInlineSelect",
+        "InlineSelect",
+        Factory::of::<InlineSelect>("InlineSelect").sync(ValueKind::Int),
+    );
 }

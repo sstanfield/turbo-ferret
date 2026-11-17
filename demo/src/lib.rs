@@ -5,11 +5,18 @@
 //! is not endorsed by its author. The demo font is rasterized from a copyrighted
 //! font (see resources/default_font/license.txt); it is for the demo only.
 
+pub mod sources;
+
 use std::rc::Rc;
 
 use turbo_ferret::anim::{ALMOST_ZERO_OPACITY, AnimSpec, Curve};
-use turbo_ferret::widgets::{Button, ResizeFit, SkinImage, TabContainer, Window};
+use turbo_ferret::widgets::{
+    Button, MessageButtons, MessageSettings, PopupAlignment, ResizeFit, ScrollContainer, ScrollMode, SelectDropdown,
+    SelectList, SkinImage, SourceRef, TabContainer, Window,
+};
 use turbo_ferret::*;
+
+use sources::Sources;
 
 /// Where the demo's resources live (the repository's `resources/` folder).
 pub fn default_resource_root() -> String {
@@ -27,6 +34,8 @@ impl Widget for MessageSink {
         "MessageSink"
     }
     fn on_message(&mut self, cx: &mut Ctx, msg: &Message) {
+        let me = cx.this();
+        let Some(win) = cx.parent_window(me) else { return };
         if msg.id == tbid!("new button") {
             // data: [the parent's id, the button number]
             if let Some([parent, i]) = msg.data.as_array() {
@@ -35,25 +44,23 @@ impl Widget for MessageSink {
                     add_remove_button(cx, target, i.as_int());
                 }
             }
-            return;
+        } else if msg.id == tbid!("instantmsg") {
+            message(cx, win, tbid!("test_dialog"), "Message window", "Instant message received!");
+        } else if msg.id == tbid!("busy") {
+            // Keep the message queue busy by posting another "busy" message.
+            cx.post_message(me, tbid!("busy"), Value::Null);
+        } else if msg.id == tbid!("delayedmsg") {
+            // data: the intended fire time
+            let late = cx.now() as i64 - msg.data.as_int() as i64;
+            let text = format!("Delayed message received!\n\nIt was received {late} ms after its intended fire time.");
+            message(cx, win, TbId::NONE, "Message window", &text);
         }
-        let text = if msg.id == tbid!("instantmsg") {
-            "Got an instant message".to_string()
-        } else {
-            format!("Got a delayed message at {} ms", cx.now())
-        };
-        show_status(cx, &text);
     }
 }
 
-/// Show a status text in the main window's title. (TB opens a TBMessageWindow, which
-/// comes with a later milestone.)
-fn show_status(ui: &mut Ui, text: &str) {
-    let root = ui.root();
-    let Some(sink) = ui.find_as::<MessageSink>(root, tbid!("msg-sink")) else { return };
-    if let Some(win) = ui.parent_window(sink) {
-        ui.set_text(win, &format!("Turbo Ferret - {text}"));
-    }
+/// A message window with an Ok button.
+fn message(ui: &mut Ui, target: WidgetId, id: TbId, title: &str, text: &str) {
+    ui.show_message(target, id, title, text, &MessageSettings::default());
 }
 
 /// TB: ScrollContainerWindow ("new buttons")
@@ -62,23 +69,86 @@ fn add_remove_button(ui: &mut Ui, parent: WidgetId, i: i32) {
     ui.set_id(b, tbid!("remove button"));
 }
 
-/// Handles clicks in the demo windows (a global listener sees every event before
+/// The row of a list item that `w` is in, with the list and the item's index.
+fn list_item_of(ui: &Ui, w: WidgetId) -> Option<(WidgetId, usize)> {
+    let mut cur = w;
+    while let Some(parent) = ui.parent(cur) {
+        if let (Some(list), Value::Int(index)) = (list_of_layout(ui, parent), ui.data(cur)) {
+            return usize::try_from(index).ok().map(|i| (list, i));
+        }
+        cur = parent;
+    }
+    None
+}
+
+/// The `SelectList` whose item layout is `layout`.
+fn list_of_layout(ui: &Ui, layout: WidgetId) -> Option<WidgetId> {
+    let mut cur = ui.parent(layout);
+    while let Some(c) = cur {
+        if let Some(l) = ui.get::<SelectList>(c) {
+            return (l.item_layout() == Some(layout)).then_some(c);
+        }
+        cur = ui.parent(c);
+    }
+    None
+}
+
+/// Handles the events of the demo windows (a global listener sees every event before
 /// it is dispatched). TB: the OnEvent of MainWindow, ScrollContainerWindow,
-/// TabContainerWindow, ConnectionWindow and AnimationsWindow
+/// TabContainerWindow, ConnectionWindow, AnimationsWindow, AdvancedListWindow and
+/// AdvancedItemWidget
 struct DemoListener {
     tab_axis: Axis,
+    sources: Sources,
+    added: u32,
+}
+
+impl DemoListener {
+    /// TB: AdvancedItemWidget::OnEvent and the busy check box
+    fn on_changed(&mut self, ui: &mut Ui, target: WidgetId, id: TbId, value: i32) -> bool {
+        if id == tbid!("check") {
+            if let Some((list, index)) = list_item_of(ui, target) {
+                self.sources.advanced.borrow_mut().set_checked(index, value != 0, Some(list));
+            }
+            return false;
+        }
+        if id == tbid!("busymsg") {
+            let root = ui.root();
+            let Some(sink) = ui.find_as::<MessageSink>(root, tbid!("msg-sink")) else { return false };
+            if value != 0 {
+                if !ui.has_message(sink, tbid!("busy")) {
+                    ui.post_message(sink, tbid!("busy"), Value::Null);
+                    if let Some(win) = ui.parent_window(target) {
+                        let text = "The message loop is now constantly busy with messages to process.\n\n\
+                                    The main thread should be working hard, but input & animations should still \
+                                    be running smoothly.";
+                        message(ui, win, tbid!("test_dialog"), "Message window", text);
+                    }
+                }
+            } else {
+                ui.cancel_messages(sink, Some(tbid!("busy")));
+            }
+        }
+        false
+    }
 }
 
 impl UiListener for DemoListener {
     fn on_event(&mut self, ui: &mut Ui, target: WidgetId, ev: &Event) -> bool {
+        let Some(n) = ui.node(target) else { return false };
+        let id = n.id();
+        if ev.kind == EventKind::Changed {
+            let value = ev.value.as_ref().map_or(0, |v| v.as_int());
+            return self.on_changed(ui, target, id, value);
+        }
         if ev.kind != EventKind::Click {
             return false;
         }
-        let Some(n) = ui.node(target) else { return false };
-        let id = n.id();
         let data = n.data().clone();
         let parent = n.parent();
         let win = ui.parent_window(target);
+        let root = ui.root();
+        let sink = ui.find_as::<MessageSink>(root, tbid!("msg-sink"));
         let res = |name: &str| format!("demo01/ui_resources/{name}");
 
         // == Main window ==
@@ -92,22 +162,45 @@ impl UiListener for DemoListener {
         } else if id == tbid!("test-connections") {
             open_resource_window(ui, &res("test_connections.tb.txt"));
         } else if id == tbid!("test-scroll-container") {
-            open_resource_window(ui, &res("test_scrollcontainer.tb.txt"));
+            open_scroll_container_window(ui, &self.sources);
+        } else if id == tbid!("test-list") {
+            open_advanced_list_window(ui, &self.sources);
         } else if id == tbid!("test-page") {
             open_page_window(ui);
-        } else if id == tbid!("test context lost") || id == tbid!("reload skin bitmaps") {
-            ui.renderer_lost();
-            show_status(ui, "bitmaps dropped and recreated");
-        } else if id == tbid!("msg") || id == tbid!("delayedmsg") {
-            let root = ui.root();
-            if let Some(sink) = ui.find_as::<MessageSink>(root, tbid!("msg-sink")) {
-                if id == tbid!("msg") {
-                    ui.post_message(sink, tbid!("instantmsg"), Value::Null);
-                } else {
-                    ui.post_message_delayed(sink, tbid!("delayedmsg"), Value::Null, 2000);
-                    show_status(ui, "delayed message posted (2 s)...");
+        } else if id == tbid!("TBWindow.close") && win.is_some_and(|w| ui.find(w, tbid!("msg-sink")).is_some()) {
+            // The main window asks before it closes (the click does not reach the
+            // window, so it stays open).
+            let mut settings = MessageSettings::new(MessageButtons::YesNo, tbid!("Icon48"));
+            settings.dimmer = true;
+            settings.styling = true;
+            let text = "Really <color #0794f8>close</color> the window?";
+            ui.show_message(win.unwrap_or(root), tbid!("confirm_close_dialog"), "Are you sure?", text, &settings);
+        } else if id == tbid!("confirm_close_dialog") {
+            if ev.ref_id == tbid!("TBMessageWindow.yes") {
+                // The message window's events go on through its target: the window
+                // that asked.
+                if let Some(main) = ui.event_destination(target) {
+                    ui.close_window(main);
                 }
             }
+        } else if id == tbid!("reload skin bitmaps") {
+            ui.renderer_lost();
+            message(ui, target, TbId::NONE, "GFX load performance", "The skin and font bitmaps were dropped.");
+        } else if id == tbid!("test context lost") {
+            ui.renderer_lost();
+            let text = "Dropped every bitmap as after a lost context.\n\nDoes everything look fine?";
+            message(ui, target, TbId::NONE, "Context lost & restore", text);
+        } else if id == tbid!("msg") {
+            if let Some(sink) = sink {
+                ui.post_message(sink, tbid!("instantmsg"), Value::Null);
+            }
+        } else if id == tbid!("delayedmsg") {
+            if let Some(sink) = sink {
+                let at = ui.now() + 2000;
+                ui.post_message_delayed(sink, tbid!("delayedmsg"), Value::Int(at as i32), 2000);
+            }
+        } else if id == tbid!("debug settings") {
+            message(ui, target, TbId::NONE, "Debug settings", "The debug overlay comes with a later milestone.");
         // == Animations window ==
         } else if id == tbid!("Animate!") {
             if let Some(w) = win {
@@ -130,8 +223,6 @@ impl UiListener for DemoListener {
                 }
             }
         } else if id == tbid!("new buttons delayed") {
-            let root = ui.root();
-            let sink = ui.find_as::<MessageSink>(root, tbid!("msg-sink"));
             let parent_id = parent.and_then(|p| ui.node(p)).map(|p| p.id());
             if let (Some(sink), Some(parent_id)) = (sink, parent_id) {
                 for i in 0..data.as_int() {
@@ -141,6 +232,27 @@ impl UiListener for DemoListener {
             }
         } else if id == tbid!("remove button") {
             ui.remove(target);
+        } else if id == tbid!("showpopupmenu1") {
+            let source: SourceRef = self.sources.popup_menu.clone();
+            ui.show_menu(target, tbid!("popupmenu1"), source, &PopupAlignment::default(), -1);
+        } else if id == tbid!("popupmenu1") {
+            // An item of the popup menu (or of one of its sub menus) was chosen.
+            let owner = ui.popup_target(target).and_then(|t| ui.parent_window(t)).unwrap_or(root);
+            let text = format!("Menu event received!\nref_id: {}", ev.ref_id.0);
+            message(ui, owner, tbid!("popup_dialog"), "Info", &text);
+        // == Customized list window ==
+        } else if id == tbid!("delete") {
+            if let Some((_, index)) = list_item_of(ui, target) {
+                self.sources.advanced.borrow_mut().remove(index);
+            }
+        } else if id == tbid!("add") {
+            // TB takes the name from an edit field, which comes with a later milestone.
+            let name = win.and_then(|w| ui.text_by_name(w, tbid!("add_name"))).unwrap_or("").to_string();
+            self.added += 1;
+            let name = if name.is_empty() { format!("New name {}", self.added) } else { name };
+            self.sources.advanced.borrow_mut().add(&name, tbid!("boy_item"), true);
+        } else if id == tbid!("delete all") {
+            self.sources.advanced.borrow_mut().clear();
         // == Tab container window ==
         } else if id == tbid!("set_align") {
             let align = match data.as_int() {
@@ -174,6 +286,43 @@ impl UiListener for DemoListener {
         }
         true
     }
+}
+
+/// A list of names with a filter field. TB: ListWindow
+pub fn open_list_window(ui: &mut Ui, sources: &Sources) -> Option<WidgetId> {
+    let w = open_resource_window(ui, "demo01/ui_resources/test_select.tb.txt")?;
+    if let Some(list) = ui.find_as::<SelectList>(w, tbid!("list")) {
+        let source: SourceRef = sources.names.clone();
+        ui.with_widget::<SelectList, _>(list, |l, cx| l.set_source(cx, Some(source)));
+    }
+    Some(w)
+}
+
+/// A list with customized item widgets. TB: AdvancedListWindow
+pub fn open_advanced_list_window(ui: &mut Ui, sources: &Sources) -> Option<WidgetId> {
+    let w = open_resource_window(ui, "demo01/ui_resources/test_select_advanced.tb.txt")?;
+    if let Some(list) = ui.find_as::<SelectList>(w, tbid!("list")) {
+        let source: SourceRef = sources.advanced.clone();
+        ui.with_widget::<SelectList, _>(list, |l, cx| l.set_source(cx, Some(source)));
+        if let Some(sc) = ui.get::<SelectList>(list).and_then(|l| l.scroll_container()) {
+            ui.with_widget::<ScrollContainer, _>(sc, |c, cx| c.set_scroll_mode(cx, ScrollMode::Auto));
+        }
+    }
+    Some(w)
+}
+
+/// A scroll container with many kinds of widgets. TB: ScrollContainerWindow
+pub fn open_scroll_container_window(ui: &mut Ui, sources: &Sources) -> Option<WidgetId> {
+    let w = open_resource_window(ui, "demo01/ui_resources/test_scrollcontainer.tb.txt")?;
+    if let Some(d) = ui.find_as::<SelectDropdown>(w, tbid!("name dropdown")) {
+        let source: SourceRef = sources.names.clone();
+        ui.with_widget::<SelectDropdown, _>(d, |d, cx| d.set_source(cx, Some(source)));
+    }
+    if let Some(d) = ui.find_as::<SelectDropdown>(w, tbid!("advanced dropdown")) {
+        let source: SourceRef = sources.advanced.clone();
+        ui.with_widget::<SelectDropdown, _>(d, |d, cx| d.set_source(cx, Some(source)));
+    }
+    Some(w)
 }
 
 /// A scroll container that snaps to its pages. TB: PageWindow
@@ -257,6 +406,7 @@ pub fn open_main_window(ui: &mut Ui) -> Option<WidgetId> {
 pub struct Demo {
     pub ui: Ui,
     pub main: Option<WidgetId>,
+    pub sources: Sources,
 }
 
 impl Demo {
@@ -281,15 +431,18 @@ impl Demo {
         // The demo background (a tile from the demo skin).
         let root = ui.root();
         ui.set_skin(root, tbid!("background"));
-        ui.add_listener(Box::new(DemoListener { tab_axis: Axis::X }));
+        let sources = Sources::new();
+        ui.add_listener(Box::new(DemoListener { tab_axis: Axis::X, sources: sources.clone(), added: 0 }));
         ui.create_bound_value(tbid!("continous-repaint"), ValueKind::Int);
         let main = open_main_window(&mut ui);
-        // TB's demo starts with the tab container window open too.
+        // TB's demo starts with these windows open too.
+        open_list_window(&mut ui, &sources);
+        open_advanced_list_window(&mut ui, &sources);
         open_resource_window(&mut ui, "demo01/ui_resources/test_tabcontainer01.tb.txt");
         if let Some(m) = main {
             ui.activate_window(m);
         }
-        Demo { ui, main }
+        Demo { ui, main, sources }
     }
 
     /// One frame of host work: time, update, and whether to repaint.

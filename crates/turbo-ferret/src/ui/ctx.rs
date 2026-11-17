@@ -11,7 +11,7 @@ use crate::widget::Widget;
 
 use super::Ui;
 use super::node::NodeRef;
-use super::tree::BusyScroll;
+use super::tree::BusyState;
 
 /// What a hook gets besides `&mut self`: all of `Ui` (through `Deref`), plus the id of
 /// the node whose hook is running.
@@ -73,7 +73,8 @@ impl Ctx<'_> {
     }
 
     /// Make this widget's current answers to the read-only queries (`axis`, `align`,
-    /// `extra_padding`, `scroll_info`, `child_translation`, `scroll_root`) visible to
+    /// `extra_padding`, `scroll_info`, `child_translation`, `scroll_root`,
+    /// `content_root`, `event_destination`) visible to
     /// the rest of the UI now. While a hook runs the widget is busy and others see
     /// the answers from when the hook started; call this after changing one of them
     /// if the hook goes on to do something that depends on it (measure children whose
@@ -87,12 +88,13 @@ impl Ctx<'_> {
             node.axis = axis;
             node.align = align;
         }
-        match BusyScroll::of(w) {
+        let state = self.ui.tree.node_ref(id).and_then(|n| BusyState::of(n, w));
+        match state {
             Some(s) => {
-                self.ui.tree.busy_scroll.insert(id, s);
+                self.ui.tree.busy.insert(id, s);
             }
             None => {
-                self.ui.tree.busy_scroll.remove(id);
+                self.ui.tree.busy.remove(id);
             }
         }
     }
@@ -179,20 +181,22 @@ impl Ctx<'_> {
 /// `None` = not called: the id is stale or detached, or the node is busy (its hook is
 /// already running further up the stack).
 pub(crate) fn call_hook<R>(ui: &mut Ui, id: WidgetId, f: impl FnOnce(&mut dyn Widget, &mut Ctx) -> R) -> Option<R> {
-    let node = ui.tree.live_mut(id)?;
-    let Some(mut b) = node.behaviour.take() else {
+    let n = ui.tree.node_ref(id)?;
+    let Some(b) = n.behaviour() else {
         ui.warn_busy(id);
         return None;
     };
-    // Scroll queries about this node must still answer while its behaviour is out.
-    if let Some(s) = BusyScroll::of(&*b) {
-        ui.tree.busy_scroll.insert(id, s);
+    // Queries about this node must still answer while its behaviour is out.
+    let busy = BusyState::of(n, b);
+    let mut b = ui.tree.live_mut(id)?.behaviour.take()?;
+    if let Some(s) = busy {
+        ui.tree.busy.insert(id, s);
     }
     ui.depth += 1;
     let r = f(&mut *b, &mut Ctx { ui, this: id });
     ui.depth -= 1;
     // (`Ctx::publish` may have added an entry during the hook.)
-    ui.tree.busy_scroll.remove(id);
+    ui.tree.busy.remove(id);
     // Slots are only freed at flush (depth 0), so the node is still there.
     if let Some(node) = ui.tree.nodes.get_mut(id) {
         node.behaviour = Some(b);

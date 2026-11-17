@@ -72,11 +72,7 @@ impl Ui {
 
     /// Where events bubble from `id`. TB: GetEventDestination
     pub fn event_destination(&self, id: WidgetId) -> Option<WidgetId> {
-        let n = self.node(id)?;
-        match n.behaviour() {
-            Some(b) => b.event_destination(n),
-            None => n.parent(),
-        }
+        self.tree.event_destination(id)
     }
 
     /// `a` is `b` or on `b`'s event-destination chain. TB: IsEventDestinationFor
