@@ -29,7 +29,7 @@ impl Stage {
         let (w, h) = window::screen_size();
         let mut demo = Demo::new(&default_resource_root(), Size::new(w as i32, h as i32), window_dpi());
         // Copy and paste with the rest of the system.
-        demo.ui.services_mut().clipboard = Box::new(MiniquadClipboard);
+        demo.ui.services_mut().clipboard = Box::new(MiniquadClipboard::new());
         Stage { demo, renderer, input: InputAdapter::new(), start: Instant::now(), frames: 0, max_frames }
     }
 

@@ -46,26 +46,16 @@
 
 #![forbid(unsafe_code)]
 
+mod clipboard;
 mod input;
 mod renderer;
+
+pub use clipboard::MiniquadClipboard;
 
 pub use input::{
     ClickCounter, InputAdapter, SHORTCUT_MODIFIER, WheelConverter, key_char, modifiers, shortcut_for, special_key,
 };
 pub use renderer::{FrameStats, MAX_QUADS, MiniquadRenderer};
-
-/// The system clipboard, through miniquad. Give it to the `Ui` once miniquad is
-/// running: `ui.services_mut().clipboard = Box::new(MiniquadClipboard)`.
-pub struct MiniquadClipboard;
-
-impl turbo_ferret::Clipboard for MiniquadClipboard {
-    fn set_text(&mut self, text: &str) {
-        miniquad::window::clipboard_set(text);
-    }
-    fn text(&mut self) -> Option<String> {
-        miniquad::window::clipboard_get().filter(|t| !t.is_empty())
-    }
-}
 
 /// The window's DPI for `turbo_ferret::Config::for_dpi`: 96 × miniquad's
 /// `window::dpi_scale()`. Call it once miniquad is running (inside
