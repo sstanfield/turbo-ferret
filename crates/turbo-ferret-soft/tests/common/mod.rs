@@ -80,3 +80,34 @@ fn read_png(path: &Path) -> Result<(u32, u32, Vec<u8>), String> {
     buf.truncate(info.buffer_size());
     Ok((info.width, info.height, buf))
 }
+
+/// The workspace `resources/` directory.
+pub fn resources_dir() -> PathBuf {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    manifest.ancestors().nth(2).expect("workspace root").join("resources")
+}
+
+/// An `ImageDecoder` on the `png` crate (dev-dependency), for loading resources such
+/// as font strips until the built-in decoder lands. Output is straight-alpha RGBA8.
+pub struct PngImages;
+
+impl turbo_ferret::ImageDecoder for PngImages {
+    fn decode(&mut self, bytes: &[u8]) -> Result<turbo_ferret::Image, turbo_ferret::DecodeError> {
+        use turbo_ferret::DecodeError;
+        let mut dec = png::Decoder::new(bytes);
+        dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+        let mut reader = dec.read_info().map_err(|_| DecodeError::UnknownFormat)?;
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).map_err(|_| DecodeError::Corrupt("png"))?;
+        buf.truncate(info.buffer_size());
+        let rgba = match info.color_type {
+            png::ColorType::Rgba => buf,
+            png::ColorType::Rgb => buf.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+            png::ColorType::GrayscaleAlpha => buf.chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+            png::ColorType::Grayscale => buf.iter().flat_map(|&g| [g, g, g, 255]).collect(),
+            png::ColorType::Indexed => return Err(DecodeError::Unsupported("indexed")),
+        };
+        let size = turbo_ferret::Size::new(info.width as i32, info.height as i32);
+        Ok(turbo_ferret::Image { size, rgba })
+    }
+}
