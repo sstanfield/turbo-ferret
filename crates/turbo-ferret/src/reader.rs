@@ -124,6 +124,11 @@ impl Ui {
         &mut self.refs
     }
 
+    /// Parse a resource file through the loader (with the ref trees).
+    pub fn load_resource(&mut self, path: &str) -> Result<ResNode, ParseError> {
+        ResNode::load(&mut *self.services.loader, path, Some(&self.refs))
+    }
+
     /// Create widgets from resource text into `parent` (its content root).
     pub fn inflate(&mut self, parent: WidgetId, src: &str) -> Result<Vec<WidgetId>, InflateError> {
         let mut cx = ParseCtx::new("<inline>").with_loader(&mut *self.services.loader).with_refs(&self.refs);
@@ -208,7 +213,7 @@ impl Ui {
             }
             _ => {
                 if self.tree.parent(w) == Some(target) && self.rect(w).is_empty() {
-                    let _ = self.with_behaviour(target, |_, cx| cx.place_child_default(w));
+                    self.place_child(target, w);
                 }
             }
         }

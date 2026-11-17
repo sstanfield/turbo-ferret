@@ -99,6 +99,7 @@ dependencies = [
 name = "turbo-ferret-demo"
 version = "0.1.0"
 dependencies = [
+ "png",
  "turbo-ferret",
  "turbo-ferret-miniquad",
  "turbo-ferret-soft",

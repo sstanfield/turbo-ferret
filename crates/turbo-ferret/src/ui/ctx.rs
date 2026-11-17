@@ -139,28 +139,8 @@ impl Ctx<'_> {
     /// Size a child to its preferred size inside this node's padding rect, following
     /// its gravity. TB: TBWidget::OnInflateChild
     pub fn place_child_default(&mut self, child: WidgetId) {
-        if self.ui.visibility(child) == Visibility::Gone {
-            return;
-        }
-        let pr = self.ui.padding_rect(self.this);
-        let mut r = pr;
-        let g = self.ui.gravity(child);
-        if !g.fills_x() || !g.fills_y() {
-            let ps = self.ui.preferred_size(child, SizeConstraints::NONE);
-            if !g.fills_x() {
-                r.w = ps.pref.w;
-                if g.contains(crate::layout::size::Gravity::RIGHT) {
-                    r.x = pr.x + pr.w - r.w;
-                }
-            }
-            if !g.fills_y() {
-                r.h = ps.pref.h;
-                if g.contains(crate::layout::size::Gravity::BOTTOM) {
-                    r.y = pr.y + pr.h - r.h;
-                }
-            }
-        }
-        self.ui.set_rect(child, r);
+        let me = self.this;
+        self.ui.place_child(me, child);
     }
 
     /// This node's local rect (0, 0, w, h).
@@ -185,6 +165,12 @@ pub(crate) fn call_hook<R>(ui: &mut Ui, id: WidgetId, f: impl FnOnce(&mut dyn Wi
     // Slots are only freed at flush (depth 0), so the node is still there.
     if let Some(node) = ui.tree.nodes.get_mut(id) {
         node.behaviour = Some(b);
+    }
+    if let Some(n) = ui.tree.node_ref(id) {
+        let ep = n.behaviour().map(|b| b.extra_padding(n)).unwrap_or_default();
+        if let Some(node) = ui.tree.nodes.get_mut(id) {
+            node.extra_pad = ep;
+        }
     }
     if !ui.pending.die_when_free.is_empty() {
         if let Some(i) = ui.pending.die_when_free.iter().position(|&d| d == id) {

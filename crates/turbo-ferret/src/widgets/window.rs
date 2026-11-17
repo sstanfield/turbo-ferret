@@ -84,6 +84,10 @@ impl Window {
         self.close
     }
 
+    fn is_internal(&self, id: WidgetId) -> bool {
+        Some(id) == self.mover || Some(id) == self.resizer
+    }
+
     /// TB: TBWindow::SetSettings (hidden parts are made `Gone`).
     fn apply_settings(&self, cx: &mut Ctx) {
         let me = cx.this();
@@ -137,6 +141,8 @@ impl Widget for Window {
         self.textfield = Some(tf);
         self.close = Some(close);
         self.apply_settings(cx);
+        // Know the title height before content is inflated and placed.
+        self.title_h = self.title_height(cx);
     }
 
     fn extra_padding(&self, _this: NodeRef) -> Edges {
@@ -166,9 +172,25 @@ impl Widget for Window {
 
     /// TB: TBWindow::OnResized
     fn arrange(&mut self, cx: &mut Ctx, old: Size, new: Size) {
-        cx.default_arrange(old, new);
         let me = cx.this();
-        self.title_h = self.title_height(cx);
+        // If the title height changed (skin or font), move the content with it.
+        let th = self.title_height(cx);
+        let dt = th - self.title_h;
+        self.title_h = th;
+        if dt != 0 {
+            for c in cx.children(me).to_vec() {
+                if self.is_internal(c) {
+                    continue;
+                }
+                let mut r = cx.rect(c);
+                r.y += dt;
+                if cx.gravity(c).fills_y() {
+                    r.h -= dt;
+                }
+                cx.set_rect(c, r);
+            }
+        }
+        cx.default_arrange(old, new);
         let w = cx.rect(me).w;
         let h = cx.rect(me).h;
         if let Some(m) = self.mover {

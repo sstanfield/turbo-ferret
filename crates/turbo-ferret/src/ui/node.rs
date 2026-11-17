@@ -63,6 +63,8 @@ pub struct Node {
     pub(crate) flags: NodeFlags,
     pub(crate) measure_cache: Option<(SizeConstraints, PreferredSize)>,
     pub(crate) type_name: &'static str,
+    /// `Widget::extra_padding` as of the last put-back (used while the behaviour is out).
+    pub(crate) extra_pad: crate::geom::Edges,
     /// User slot (TB's `data`).
     pub data: Value,
     /// `None` only while one of its hooks runs (take-out).
@@ -87,6 +89,7 @@ impl Node {
             flags: NodeFlags::NONE,
             measure_cache: None,
             type_name: b.type_name(),
+            extra_pad: crate::geom::Edges::ZERO,
             data: Value::Null,
             behaviour: Some(b),
         }

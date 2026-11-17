@@ -15,6 +15,7 @@ use super::{MAX_DEPTH, Skin};
 impl Skin {
     /// Paint element `id` (with overrides and children) at `dst`. Returns the element
     /// that was used (an override, or `id` itself). TB: TBSkin::PaintSkin
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn paint_skin(
         &self,
         p: &mut Painter,

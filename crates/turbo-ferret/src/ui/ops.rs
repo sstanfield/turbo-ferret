@@ -355,6 +355,33 @@ impl Ui {
         ps
     }
 
+    /// Size `child` to its preferred size inside `parent`'s padding rect, following
+    /// its gravity. TB: TBWidget::OnInflateChild
+    pub fn place_child(&mut self, parent: WidgetId, child: WidgetId) {
+        if self.visibility(child) == Visibility::Gone {
+            return;
+        }
+        let pr = self.padding_rect(parent);
+        let mut r = pr;
+        let g = self.gravity(child);
+        if !g.fills_x() || !g.fills_y() {
+            let ps = self.preferred_size(child, SizeConstraints::NONE);
+            if !g.fills_x() {
+                r.w = ps.pref.w;
+                if g.contains(crate::layout::size::Gravity::RIGHT) {
+                    r.x = pr.x + pr.w - r.w;
+                }
+            }
+            if !g.fills_y() {
+                r.h = ps.pref.h;
+                if g.contains(crate::layout::size::Gravity::BOTTOM) {
+                    r.y = pr.y + pr.h - r.h;
+                }
+            }
+        }
+        self.set_rect(child, r);
+    }
+
     /// Preferred size with no constraints.
     pub fn preferred_size_free(&mut self, id: WidgetId) -> PreferredSize {
         self.preferred_size(id, SizeConstraints::NONE)

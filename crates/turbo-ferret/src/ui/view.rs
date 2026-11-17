@@ -63,10 +63,12 @@ impl<'a> View<'a> {
     pub fn padding(&self, id: WidgetId) -> Edges {
         let mut e = self.element(id).map(|e| e.padding).unwrap_or(Edges::ZERO);
         if let Some(n) = self.node(id) {
-            if let Some(b) = n.behaviour() {
-                let x = b.extra_padding(n);
-                e = Edges::new(e.left + x.left, e.top + x.top, e.right + x.right, e.bottom + x.bottom);
-            }
+            // While its hook runs, the widget's padding comes from the cached value.
+            let x = match n.behaviour() {
+                Some(b) => b.extra_padding(n),
+                None => n.node.extra_pad,
+            };
+            e = Edges::new(e.left + x.left, e.top + x.top, e.right + x.right, e.bottom + x.bottom);
         }
         e
     }
