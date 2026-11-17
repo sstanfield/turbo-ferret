@@ -138,7 +138,7 @@ Added with M5 (15 to 22), M6 (23 to 31) and M7 (32 to 38):
 
 ### Review (2026-11-17)
 
-After M8 the whole code base was reviewed by six independent readers, one per area (core tree and dispatch; resources, layout and skin; rendering and backends; widgets; text editing; the M8 code), each asked to confirm its findings with failing tests. They reported 62 findings; all but the ones listed below are fixed, and their tests are in the suite (`tests/review_*.rs` in the core, `tests/review.rs` in the TrueType crate and the font tool, `tests/input_quirks.rs` in the miniquad crate), including a re-entrancy fuzzer for the core and a randomized test of `StyleEdit` against a plain `String`. Nothing was found in the renderer, painter, atlas, glyph cache or software renderer.
+After M8 the whole code base was reviewed by six independent readers, one per area (core tree and dispatch; resources, layout and skin; rendering and backends; widgets; text editing; the M8 code), each asked to confirm its findings with failing tests. They reported 65 findings; all but the ones listed below are fixed, and their tests are in the suite (`tests/review_*.rs` in the core, `tests/review.rs` in the TrueType crate and the font tool, `tests/input_quirks.rs` in the miniquad crate), including a re-entrancy fuzzer for the core and a randomized test of `StyleEdit` against a plain `String`. Nothing was found in the renderer, painter, atlas, glyph cache or software renderer.
 
 Not fixed, on purpose:
 - Shortcut letters follow key positions (deviation 57).
