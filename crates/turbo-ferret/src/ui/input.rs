@@ -103,19 +103,7 @@ impl Ui {
     /// Explicit state plus the automatic ones (pressed, hovered, focused).
     /// TB: GetAutoState
     pub fn auto_state(&self, id: WidgetId) -> WidgetState {
-        let mut s = self.state(id);
-        let i = &self.input;
-        let pressed = !i.cancel_click && i.captured == Some(id) && i.hovered == Some(id);
-        if pressed {
-            s |= WidgetState::PRESSED;
-        }
-        if i.hovered == Some(id) && (!i.hover_by_touch || pressed) {
-            s |= WidgetState::HOVERED;
-        }
-        if i.focused == Some(id) && i.show_focus {
-            s |= WidgetState::FOCUSED;
-        }
-        s
+        self.view().auto_state(id)
     }
 
     /// Topmost widget under `p` (in `root`'s coordinates), not counting `root` itself.

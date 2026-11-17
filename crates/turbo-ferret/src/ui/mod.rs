@@ -12,6 +12,7 @@ mod ops;
 mod process;
 pub(crate) mod tree;
 mod value_group;
+mod view;
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;
@@ -25,6 +26,7 @@ pub use focus::FocusReason;
 pub use input::InputState;
 pub use listen::{ListenerId, UiListener};
 pub use node::{Node, NodeFlags, NodeRef};
+pub use view::View;
 
 use crate::arena::WidgetId;
 use crate::font::FontDesc;
@@ -109,6 +111,7 @@ pub struct Ui {
     pub(crate) refs: RefTrees,
     /// Dimension conversion (set from the skin at M3).
     pub(crate) dim: DimensionConverter,
+    pub(crate) skin: crate::skin::Skin,
 }
 
 impl Ui {
@@ -135,6 +138,7 @@ impl Ui {
             lang: Language::default(),
             refs: RefTrees::default(),
             dim: DimensionConverter::new(96, 96, 96),
+            skin: crate::skin::Skin::default(),
         };
         crate::widgets::register_builtins(&mut ui);
         ui
@@ -565,13 +569,7 @@ impl Ui {
 
     /// The skin padding plus the widget's extra padding (M3 adds the skin part).
     pub fn padding(&self, id: WidgetId) -> Edges {
-        let Some(n) = self.node(id) else { return Edges::ZERO };
-        let mut e = self.skin_padding(id);
-        if let Some(b) = n.behaviour() {
-            let x = b.extra_padding(n);
-            e = Edges::new(e.left + x.left, e.top + x.top, e.right + x.right, e.bottom + x.bottom);
-        }
-        e
+        self.view().padding(id)
     }
 
     /// The content area inside padding, in the node's local coordinates. TB: GetPaddingRect

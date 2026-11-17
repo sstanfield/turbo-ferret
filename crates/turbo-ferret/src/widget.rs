@@ -288,6 +288,10 @@ pub trait Widget: Any {
     fn scroll_root(&self) -> Option<WidgetId> {
         None
     }
+    /// Alignment for the skin's `align` condition (tab containers). TB: PROPERTY_ALIGN
+    fn align(&self) -> Option<Align> {
+        None
+    }
     fn custom_skin_condition(&self, cond: &Condition) -> bool {
         false
     }
