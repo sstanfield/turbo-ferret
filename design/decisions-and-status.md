@@ -1,6 +1,6 @@
 # Turbo Ferret (Rust port of Turbo Badger): Decisions and Status
 
-*Hand-off notes so that work can resume without re-asking. Last updated 2026-11-17 (M0 to M4 implemented). This file is the record.*
+*Hand-off notes so that work can resume without re-asking. Last updated 2026-11-17 (M0 to M5 implemented). This file is the record.*
 
 ## Where things stand
 
@@ -10,7 +10,7 @@
 | 2. Assess ECS-style widget storage | Done, agreed | [ecs-widget-storage-assessment.md](ecs-widget-storage-assessment.md): verdict, option C, `no_std` costs, questions `M-01` to `M-08` |
 | 3. Mutability design | Done, agreed (five decisions below) | This file, section "Mutability" |
 | 4. Full port design | Done, accepted by Steve 2026-11-17 | [port-design.md](port-design.md): crates, core types, traits, event/layout/paint flow, milestones M0 to M8 |
-| 5. Implementation with Claude Code | M0 to M4 done 2026-11-17 (see "Implementation status" below). Next: M5 | Workspace in the repo root |
+| 5. Implementation with Claude Code | M0 to M5 done 2026-11-17 (see "Implementation status" below). Next: M6 | Workspace in the repo root |
 
 **Original project:** Turbo Badger by Emil Segerås, zlib licence (copyright 2011 to 2014, see `src/tb/tb_core.h`). The port must credit it and ship its notice: see port-design.md section 0.
 
@@ -52,6 +52,7 @@ Nothing blocking. Implementation notes and the deviations made while implementin
 | M2 Layout and inflation | Done | `layout/` (size types, `stack.rs`, `dim.rs`), measure cache, `reader.rs` (registry, generic properties, inflation). `tests/m2_layout.rs`; every demo01 layout inflates |
 | M3 Rendering, skin, fonts | Done | `render/` (renderer trait, painter, atlas), `skin/`, `font/` (TBBF, manager, glyph cache), `paint.rs`, hand-rolled `image/` (PNG + inflate, byte-identical to the `png` crate on all 146 resource PNGs, fuzzed), `turbo-ferret-soft`, goldens in `tests/golden/` |
 | M4 Basic widgets, animation, demo | Done: `cargo run -p turbo-ferret-demo` (ran on macOS, GL, 2560x1600 at 192 dpi) | `widgets/` (TextField, Button, ClickLabel, SkinImage, Separator, ProgressSpinner, CheckBox, RadioButton, ScrollBar, Slider, Container, Layout, Mover, Resizer, Dimmer, Window), `anim.rs`, `demo/` |
+| M5 Scrolling and containers | Done | `ui/scroller.rs` (kinetic and smooth scrolling stepped by `update`, pan tracking, snap), panning in `ui/input.rs`, `widgets/scroll_container.rs`, `widgets/tab_container.rs`, `widgets/toggle.rs` (ToggleContainer, SectionHeader, Section), the overflow fade-out in `widgets/layout.rs`. `tests/m5_scroll.rs`, `tests/m5_containers.rs`, goldens `scroll_container`, `tab_container`, `sections`, `layout_fadeout`. The demo uses TB's own main window and has the scroll container, page (snap), toggle and tab windows |
 
 ### Deviations from port-design.md made during implementation
 
@@ -66,11 +67,22 @@ Each keeps TB's behaviour or fixes a problem found while porting; none adds a de
 7. **A node caches `extra_padding`** when its behaviour is put back, so padding is right while its own hook runs.
 8. **Skin updates use one dirty flag** (re-resolve strong overrides for the whole tree, as TB did), not a per-node `SKIN_STATE_DIRTY` flag.
 9. **Long click is armed for touch only**, as in TB.
-10. **Panning scrolls directly** (no kinetic scroller) until M5 brings `Scroller`.
+10. *(Gone with M5: panning now feeds the kinetic scroller.)*
 11. **`Color` is a struct of four `u8`s** (straight alpha) rather than `Color(u32)`.
 12. **The skin condition target `ancestors`** no longer falls through to `prev sibling` (a missing `break` in TB).
 13. **Busy semantics, as designed, with these visible effects:** a widget's own `on_event` is not called for events it emits from its own hooks; a widget that removes itself from its own hook gets no `on_removed`; a parent that adds or removes children from its own hook gets no `on_child_added`/`on_child_removed`.
-14. **The demo main window** is `resources/demo/main_window.tb.txt`, modeled on TB's `test_ui.tb.txt` but without `TBSection` (an M5 widget).
+14. *(Gone with M5: the demo main window is TB's `test_ui.tb.txt`.)* The demo shows message results in the main window's title until `MessageWindow` exists (M6).
+
+Added with M5:
+
+15. **`Changed` events always carry the new value in `ev.value`** (the design kept it only for widgets with a value connection). Handlers up the chain need it: they cannot read the value back from the sender, which is busy while it fires the event. A scroll container gets its scroll bar's position this way, and a section its header's state.
+16. **A busy widget still answers the queries others depend on.** While a hook runs, `scroll_info`, `child_translation` and `scroll_root` are answered from a copy taken when the hook started (side table `busy_scroll`, filled only for scrollable widgets), and `axis` and `align` from the node (refreshed when the behaviour is put back, like `extra_padding`). Without this, a container that inflates or measures children from its own hook gave them the wrong skin (conditions such as `ancestors align` and `parent axis` saw defaults) and a scroll started from the widget's own key handler jumped. `Ctx::publish(self)` refreshes the copies in the middle of a hook. Still not covered: skin conditions on the `value` or a custom property of a busy widget see the default until its hook returns.
+17. **The scroller is stepped by every `update()`**, not by a 60 Hz message, so the host's frame rate sets the pace (`next_wake_time` is `Some(now)` while one runs). Two changes from TB's timing: a scroll with no speed stops at once (TB kept it alive for one timer tick), and a scroll stops as soon as each axis is either out of time or stuck at its end (TB stopped early only when both axes were stuck in the same tick, and otherwise ran out the clock). Pan moves that arrive at the same time stamp count as one speed sample, so a host that sets the time once per frame gets the same flick as one that sets it per event (TB's clock was read per event).
+18. **Scroll snapping is a closure**, `ui.set_scroll_snap(id, Some(Rc::new(|ui, target, pos| ...)))`, in place of `TBScrollerSnapListener`.
+19. **`Ui::set_layout_boundary`** (a node flag) replaces TB's virtual `InvalidateLayout`: a scroll container that does not adapt to its content stops layout invalidation from reaching its ancestors.
+20. **`ScrollContainer` keeps its own `ScrollInfo` and pushes the position into its root child**, which translates and clips. TB's root read the scroll bars of its parent while painting. The container sets its scroll bars with `set_value_quiet`/`set_limits_quiet` (no `Changed` event), since it is the one changing them.
+21. **TB subclasses became composition:** `TBTabLayout` is a `Layout` in the tab role (`Layout::tab_layout()`), `SectionHeader` wraps a `Button` and delegates to it. `Section` handles the header's `Changed` event as it bubbles; TB's header called its section from its own `OnEvent`, which a busy widget cannot do here (deviation 13).
+22. **`Ui::inflate_properties(widget, node)`** applies a node's properties to an existing widget (TB called `OnInflate` on it); the tab container uses it for its `tabs`, `content` and `root` nodes. Known gap: inside those three nodes a local reference (`@>path`) resolves against that node, not against the whole file. `@tree>` references and language strings work as elsewhere.
 
 ### Dependencies
 

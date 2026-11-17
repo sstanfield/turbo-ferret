@@ -121,7 +121,7 @@ impl UiListener for DemoListener {
         // == Scroll container window ==
         } else if id == tbid!("add img") {
             let content = ui.content_root(target);
-            let img = ui.add_at(content, SkinImage::default(), Z::Bottom);
+            let img = ui.add_at(content, SkinImage, Z::Bottom);
             ui.set_skin(img, tbid!("Icon16"));
         } else if id == tbid!("new buttons") {
             if let Some(p) = parent {

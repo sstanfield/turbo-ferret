@@ -248,15 +248,27 @@ impl Ui {
         let left = self.scroll_by_recursive(id, d);
         let now = self.now;
         let s = self.scroller_mut(id);
-        // Smooth the speed with the previous one to reduce fluctuation.
-        if let Some(t) = s.pan_time {
-            let dt = now.saturating_sub(t) as f64;
-            s.pan_delta_time = if s.pan_delta_time != 0.0 { (dt + s.pan_delta_time) / 2.0 } else { dt };
-        }
-        s.pan_time = Some(now);
         let d = xy(d);
+        if s.pan_time == Some(now) {
+            // Several moves at the same time stamp (a host that sets the time once
+            // per frame, or a fast mouse) are one movement sample: add to the last
+            // one instead of averaging in a zero time step, which would inflate the
+            // speed.
+            for (a, &da) in d.iter().enumerate() {
+                s.pan_d[a] += da as f32 / 2.0;
+            }
+        } else {
+            // Smooth the speed with the previous one to reduce fluctuation.
+            if let Some(t) = s.pan_time {
+                let dt = now.saturating_sub(t) as f64;
+                s.pan_delta_time = if s.pan_delta_time != 0.0 { (dt + s.pan_delta_time) / 2.0 } else { dt };
+            }
+            s.pan_time = Some(now);
+            for (a, &da) in d.iter().enumerate() {
+                s.pan_d[a] = (s.pan_d[a] + da as f32) / 2.0;
+            }
+        }
         for a in 0..2 {
-            s.pan_d[a] = (s.pan_d[a] + d[a] as f32) / 2.0;
             // A change of direction resets the pan power of that axis.
             if s.pan_d[a] != 0.0 && (s.prev_pan_d[a] < 0.0) != (s.pan_d[a] < 0.0) {
                 s.power[a] = 1.0;
@@ -272,7 +284,8 @@ impl Ui {
         let now = self.now;
         let Some(s) = self.tree.scrollers.get(id) else { return };
         let (pan_d, dt, power) = (s.pan_d, s.pan_delta_time, s.power);
-        if !s.pan_time.is_some_and(|t| now < t + PAN_START_THRESHOLD_MS) {
+        // The pointer rested before it was released: no flick.
+        if s.pan_time.is_none_or(|t| now >= t + PAN_START_THRESHOLD_MS) {
             return self.scroller_stop_or_snap(id);
         }
         // Too little speed: do not scroll by accident.

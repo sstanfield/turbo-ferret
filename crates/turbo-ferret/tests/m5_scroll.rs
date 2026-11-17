@@ -326,6 +326,32 @@ fn pan_follows_the_pointer_then_flicks() {
 }
 
 #[test]
+fn moves_at_the_same_time_stamp_are_one_sample() {
+    // A host that sets the time once per frame delivers several moves per time
+    // stamp. The flick must be about as long as with one move per stamp.
+    let flick = |parts: i32| {
+        let mut ui = ui();
+        let (sc, _c) = container(&mut ui, ScrollMode::Off, Size::new(100, 100_000));
+        let mut p = Point::new(50, 90);
+        ui.pointer_down(p, 1, Modifiers::NONE);
+        for _ in 0..6 {
+            ui.set_time(ui.now() + 10);
+            for _ in 0..parts {
+                p += Point::new(0, -10 / parts);
+                ui.pointer_move(p, Modifiers::NONE);
+            }
+            ui.update();
+        }
+        ui.pointer_up(p, Modifiers::NONE);
+        let at = pos(&ui, sc).y;
+        settle(&mut ui, 20_000);
+        pos(&ui, sc).y - at
+    };
+    let (one, five) = (flick(1), flick(5));
+    assert!((five - one).abs() <= one / 5, "one move per stamp flicks {one}, five moves {five}");
+}
+
+#[test]
 fn slow_release_does_not_flick() {
     let mut ui = ui();
     let (sc, _c) = container(&mut ui, ScrollMode::Off, Size::new(100, 2000));
@@ -594,7 +620,8 @@ fn a_scroll_container_is_a_layout_boundary() {
 fn hooks_can_ask_about_their_own_scroll_state() {
     // While a widget's hook runs its behaviour is taken out; scroll info and child
     // translation must still be answered (from the value at hook entry).
-    struct Probe(Rc<RefCell<Vec<(Option<Point>, Point)>>>, WidgetId);
+    type Seen = Rc<RefCell<Vec<(Option<Point>, Point)>>>;
+    struct Probe(Seen, WidgetId);
     impl Widget for Probe {
         fn type_name(&self) -> &'static str {
             "Probe"
@@ -616,7 +643,7 @@ fn hooks_can_ask_about_their_own_scroll_state() {
     }
     let mut ui = ui();
     let root = ui.root();
-    let seen = Rc::new(RefCell::new(Vec::new()));
+    let seen: Seen = Rc::new(RefCell::new(Vec::new()));
     let child = ui.create(Plain);
     let p = ui.add(root, Probe(seen.clone(), child));
     ui.attach(p, child, Z::Top);
