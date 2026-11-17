@@ -124,6 +124,7 @@ impl Ui {
     pub fn renderer_lost(&mut self) {
         self.skin.atlas.renderer_lost();
         self.fonts.renderer_lost();
+        self.images.renderer_lost();
         self.repaint = true;
     }
 }

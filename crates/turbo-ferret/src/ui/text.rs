@@ -50,6 +50,31 @@ impl Ui {
         ok
     }
 
+    /// The image for a file name, loaded through the services the first time and
+    /// shared after that. It stays loaded while a handle to it exists. Empty if it
+    /// cannot be loaded. TB: TBImageManager::GetImage(filename)
+    pub fn image(&mut self, filename: &str) -> crate::images::ImageHandle {
+        let Ui { images, services, skin, .. } = self;
+        images.get(filename, &mut *services.loader, &mut *services.images, &skin.dim)
+    }
+
+    /// The image called `name`, made from straight-alpha RGBA8 pixels unless one
+    /// with that name is loaded already.
+    /// TB: TBImageManager::GetImage(name, buffer, width, height)
+    pub fn image_from_pixels(
+        &mut self,
+        name: &str,
+        size: crate::geom::Size,
+        rgba: &[u8],
+    ) -> crate::images::ImageHandle {
+        self.images.get_from_pixels(name, size, rgba)
+    }
+
+    /// The image manager. TB: g_image_manager
+    pub fn images(&self) -> &crate::images::ImageManager {
+        &self.images
+    }
+
     /// The text on the clipboard, if any. TB: TBClipboard::GetText
     pub fn clipboard_text(&mut self) -> Option<alloc::string::String> {
         self.services.clipboard.text()

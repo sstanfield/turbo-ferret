@@ -8,6 +8,7 @@ use crate::arena::WidgetId;
 use crate::font::{FontDesc, FontManager};
 use crate::geom::{Color, Point, Rect};
 use crate::id::TbId;
+use crate::images::{ImageHandle, ImageManager};
 use crate::layout::size::Visibility;
 use crate::msg::Millis;
 use crate::render::painter::Painter;
@@ -30,6 +31,7 @@ pub struct PaintCtx<'a, 'r> {
     pub(crate) now: Millis,
     pub(crate) repaint: &'a mut bool,
     pub(crate) fonts: &'a mut FontManager,
+    pub(crate) images: &'a ImageManager,
 }
 
 impl<'a, 'r> PaintCtx<'a, 'r> {
@@ -133,6 +135,20 @@ impl<'a, 'r> PaintCtx<'a, 'r> {
     }
 
     /// Run `f` with drawing clipped to `rect` (local); the clip is restored after.
+    /// Draw an image of the image manager, stretched to `dst`. Nothing is drawn for
+    /// an empty handle. TB: TBImageWidget::OnPaint (g_renderer->DrawBitmap with a fragment)
+    pub fn draw_image(&mut self, dst: Rect, image: &ImageHandle) {
+        let Some(frag) = self.images.fragment(image) else { return };
+        if let Some(bitmap) = self.images.atlas().bitmap(frag.page) {
+            self.painter.draw_bitmap(dst, frag.rect, bitmap, Color::WHITE);
+        }
+    }
+
+    /// The image manager (for inspection).
+    pub fn images(&self) -> &'a ImageManager {
+        self.images
+    }
+
     pub fn with_clip(&mut self, rect: Rect, f: impl FnOnce(&mut PaintCtx<'a, 'r>)) {
         let screen = rect.offset_by(self.painter.translation());
         let old = self.painter.clip();
@@ -213,29 +229,31 @@ impl Ui {
         let vp = self.viewport;
         let root = self.root();
         let now = self.now;
-        let Ui { tree, input, skin, repaint, default_font, fonts, .. } = self;
+        let Ui { tree, input, skin, repaint, default_font, fonts, images, .. } = self;
         fonts.begin_frame();
         skin.atlas.upload_all(renderer);
+        images.begin_frame(renderer);
         let mut painter = Painter::new(renderer, vp);
         let view = View { tree, input, skin };
         let st =
             PaintState { offset: Point::ZERO, opacity: 1.0, text_color: skin.defaults.text_color, font: *default_font };
-        let mut again = false;
-        paint_node(&view, fonts, &mut painter, root, st, now, &mut again);
+        let mut frame = Frame { fonts, images, now, again: false };
+        paint_node(&view, &mut frame, &mut painter, root, st);
         painter.finish();
-        *repaint = again;
+        *repaint = frame.again;
     }
 }
 
-fn paint_node(
-    v: &View<'_>,
-    fonts: &mut FontManager,
-    p: &mut Painter,
-    id: WidgetId,
-    st: PaintState,
+/// What every node of one paint walk shares.
+struct Frame<'a> {
+    fonts: &'a mut FontManager,
+    images: &'a ImageManager,
     now: Millis,
-    again: &mut bool,
-) {
+    /// A widget asked for another frame.
+    again: bool,
+}
+
+fn paint_node(v: &View<'_>, f: &mut Frame<'_>, p: &mut Painter, id: WidgetId, st: PaintState) {
     let Some(n) = v.node(id) else { return };
     let r = n.rect();
     if n.opacity() == 0.0 || r.is_empty() || n.visibility() != Visibility::Visible {
@@ -266,9 +284,10 @@ fn paint_node(
             element: used,
             text_color,
             font,
-            now,
-            repaint: again,
-            fonts,
+            now: f.now,
+            repaint: &mut f.again,
+            fonts: &mut *f.fonts,
+            images: f.images,
         };
         b.paint(&mut cx);
     }
@@ -287,7 +306,7 @@ fn paint_node(
         for &c in n.children() {
             let Some(cn) = v.node(c) else { continue };
             if clip.intersects(&cn.rect().offset_by(child_offset)) {
-                paint_node(v, fonts, p, c, child_st, now, again);
+                paint_node(v, f, p, c, child_st);
             }
         }
         // Overlays are painted after all children. TB: OnPaintChildren overlay loop
@@ -309,14 +328,14 @@ fn paint_node(
             }
         }
         // Generic focus for a focused child whose skin has no focused state.
-        if let Some(f) = v.input.focused.filter(|&f| v.tree.parent(f) == Some(id)) {
-            if let Some(fnode) = v.node(f) {
-                let fs = v.auto_state(f);
-                let has = v.element(f).is_some_and(|e| e.has_state(WidgetState::FOCUSED, v, f));
+        if let Some(fw) = v.input.focused.filter(|&fw| v.tree.parent(fw) == Some(id)) {
+            if let Some(fnode) = v.node(fw) {
+                let fs = v.auto_state(fw);
+                let has = v.element(fw).is_some_and(|e| e.has_state(WidgetState::FOCUSED, v, fw));
                 if !has && fs.contains(WidgetState::FOCUSED) {
                     p.set_translation(child_offset);
                     p.set_opacity(opacity);
-                    v.skin.paint_skin(p, fnode.rect(), crate::tbid!("generic_focus"), fs, v, f, 0);
+                    v.skin.paint_skin(p, fnode.rect(), crate::tbid!("generic_focus"), fs, v, fw, 0);
                 }
             }
         }
@@ -336,9 +355,10 @@ fn paint_node(
             element: used,
             text_color,
             font,
-            now,
-            repaint: again,
-            fonts,
+            now: f.now,
+            repaint: &mut f.again,
+            fonts: &mut *f.fonts,
+            images: f.images,
         };
         b.paint_after_children(&mut cx);
     }

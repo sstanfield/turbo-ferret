@@ -121,6 +121,7 @@ pub struct Ui {
     pub(crate) skin: crate::skin::Skin,
     pub(crate) anims: crate::anim::Animations,
     pub(crate) fonts: crate::font::FontManager,
+    pub(crate) images: crate::images::ImageManager,
 }
 
 impl Ui {
@@ -151,6 +152,7 @@ impl Ui {
             skin: crate::skin::Skin::default(),
             anims: Default::default(),
             fonts: crate::font::FontManager::new(),
+            images: crate::images::ImageManager::new(),
         };
         crate::widgets::register_builtins(&mut ui);
         ui

@@ -2,6 +2,7 @@
 
 pub mod button;
 pub mod edit_field;
+pub mod image_widget;
 pub mod inline_select;
 pub mod layout;
 pub mod message_window;
@@ -18,6 +19,7 @@ pub mod window;
 
 pub use button::{Button, ClickLabel};
 pub use edit_field::{EditField, EditFieldScrollRoot, EditType};
+pub use image_widget::ImageWidget;
 pub use inline_select::InlineSelect;
 pub use layout::Layout;
 pub use message_window::{MessageButtons, MessageSettings, MessageWindow};
@@ -89,6 +91,7 @@ pub(crate) fn register_builtins(ui: &mut Ui) {
     );
     register_both(ui, "TBTextField", "TextField", Factory::of::<TextField>("TextField").sync(ValueKind::Str));
     register_both(ui, "TBSkinImage", "SkinImage", Factory::of::<SkinImage>("SkinImage"));
+    register_both(ui, "TBImageWidget", "ImageWidget", Factory::of::<ImageWidget>("ImageWidget"));
     register_both(ui, "TBSeparator", "Separator", Factory::of::<Separator>("Separator"));
     register_both(
         ui,

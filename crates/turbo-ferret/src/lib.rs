@@ -27,6 +27,7 @@ pub mod geom;
 pub mod id;
 #[cfg(feature = "png")]
 pub mod image;
+pub mod images;
 pub mod lang;
 pub mod layout;
 pub mod math;
@@ -47,6 +48,7 @@ pub use event::{Event, EventKind, Modifiers, SpecialKey};
 pub use font::{FontBackend, FontDesc, FontFace, FontManager, GlyphSource, LoadCtx};
 pub use geom::{Color, Edges, Point, Rect, Region, Size};
 pub use id::TbId;
+pub use images::{ImageHandle, ImageManager};
 pub use lang::Language;
 pub use layout::{Gravity, LayoutParams, PreferredSize, SizeConstraints, Visibility};
 pub use msg::{Message, Millis};
