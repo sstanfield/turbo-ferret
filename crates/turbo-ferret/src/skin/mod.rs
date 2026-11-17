@@ -30,6 +30,32 @@ use element::{MatchRule, find_state_element};
 /// is_getting flags, so reads stay reads).
 pub const MAX_DEPTH: u32 = 8;
 
+/// The elements being painted or resolved above the current one. An element that
+/// leads back to one of them is left out, so a loop of overrides ends at its first
+/// repeat (TB's `is_painting` and `is_getting` flags), not after `MAX_DEPTH` rounds.
+#[derive(Copy, Clone)]
+pub(crate) struct Chain<'a> {
+    id: TbId,
+    up: Option<&'a Chain<'a>>,
+}
+
+impl<'a> Chain<'a> {
+    /// The chain with `id` added, or `None` if `id` is in it already or it is
+    /// `MAX_DEPTH` long.
+    pub(crate) fn push(up: Option<&'a Chain<'a>>, id: TbId) -> Option<Chain<'a>> {
+        let mut depth = 0;
+        let mut cur = up;
+        while let Some(c) = cur {
+            if c.id == id {
+                return None;
+            }
+            depth += 1;
+            cur = c.up;
+        }
+        (depth < MAX_DEPTH).then_some(Chain { id, up })
+    }
+}
+
 /// TB: TBSkin's defaults section.
 #[derive(Clone, Debug)]
 pub struct SkinDefaults {
@@ -135,23 +161,21 @@ impl Skin {
         v: &View<'_>,
         w: WidgetId,
     ) -> Option<&SkinElement> {
-        self.strong_override_depth(id, state, v, w, 0)
+        self.strong_override_in(id, state, v, w, None)
     }
 
-    fn strong_override_depth(
+    fn strong_override_in(
         &self,
         id: TbId,
         state: SkinState,
         v: &View<'_>,
         w: WidgetId,
-        depth: u32,
+        up: Option<&Chain<'_>>,
     ) -> Option<&SkinElement> {
         let e = self.element(id)?;
-        if depth >= MAX_DEPTH {
-            return None;
-        }
+        let here = Chain::push(up, id)?;
         if let Some(o) = find_state_element(&e.strong_overrides, state, v, w, MatchRule::Default) {
-            if let Some(oe) = self.strong_override_depth(o.element, state, v, w, depth + 1) {
+            if let Some(oe) = self.strong_override_in(o.element, state, v, w, Some(&here)) {
                 return Some(oe);
             }
         }

@@ -110,7 +110,8 @@ impl Widget for Layout {
     /// TB: TBLayout::OnInflate
     fn on_inflate(&mut self, cx: &mut Ctx, res: &ResNode) {
         if let Some(s) = res.get("spacing") {
-            self.spacing = Some(cx.px(&s.value.as_str(), 0));
+            // (Not a dimension: the skin's spacing, as in TB.)
+            self.spacing = cx.px_opt(&s.value.as_str());
         }
         let me = cx.this();
         cx.set_gravity(me, Gravity::ALL);

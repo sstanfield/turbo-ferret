@@ -10,7 +10,7 @@ use crate::ui::View;
 use crate::widget::SkinState;
 
 use super::element::{MatchRule, SkinElement, SkinKind, find_state_element};
-use super::{MAX_DEPTH, Skin};
+use super::{Chain, Skin};
 
 impl Skin {
     /// Paint element `id` (with overrides and children) at `dst`. Returns the element
@@ -24,16 +24,28 @@ impl Skin {
         state: SkinState,
         v: &View<'_>,
         w: WidgetId,
-        depth: u32,
+    ) -> Option<TbId> {
+        self.paint_skin_in(p, dst, id, state, v, w, None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn paint_skin_in(
+        &self,
+        p: &mut Painter,
+        dst: Rect,
+        id: TbId,
+        state: SkinState,
+        v: &View<'_>,
+        w: WidgetId,
+        up: Option<&Chain<'_>>,
     ) -> Option<TbId> {
         let e = self.element(id)?;
-        if depth >= MAX_DEPTH {
-            return None;
-        }
+        // Avoid eternal recursion when overrides refer to elements referring back.
+        let here = Chain::push(up, id)?;
         let mut used = e.id;
         let mut overridden = false;
         if let Some(o) = find_state_element(&e.overrides, state, v, w, MatchRule::Default) {
-            if let Some(u) = self.paint_skin(p, dst, o.element, state, v, w, depth + 1) {
+            if let Some(u) = self.paint_skin_in(p, dst, o.element, state, v, w, Some(&here)) {
                 used = u;
                 overridden = true;
             }
@@ -43,7 +55,7 @@ impl Skin {
         }
         for c in &e.children {
             if c.is_match(state, v, w, MatchRule::Default) {
-                self.paint_skin(p, dst, c.element, c.state & state, v, w, depth + 1);
+                self.paint_skin_in(p, dst, c.element, c.state & state, v, w, Some(&here));
             }
         }
         Some(used)
@@ -61,7 +73,7 @@ impl Skin {
     ) {
         for o in &e.overlays {
             if o.is_match(state, v, w, MatchRule::Default) {
-                self.paint_skin(p, dst, o.element, o.state & state, v, w, 1);
+                self.paint_skin(p, dst, o.element, o.state & state, v, w);
             }
         }
     }

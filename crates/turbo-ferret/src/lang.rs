@@ -30,7 +30,18 @@ impl Language {
     /// Add the strings of a language file read through `loader`. Existing strings stay;
     /// a key read again is replaced. TB: tb_language.cpp TBLanguage::Load
     pub fn load(&mut self, loader: &mut dyn ResourceLoader, path: &str) -> Result<(), ParseError> {
-        let node = ResNode::load(loader, path, None)?;
+        self.load_with_refs(loader, path, None)
+    }
+
+    /// [`load`](Self::load), with the ref trees that the file's `@if` conditions and
+    /// `@include @tree>...` lines may use.
+    pub fn load_with_refs(
+        &mut self,
+        loader: &mut dyn ResourceLoader,
+        path: &str,
+        refs: Option<&crate::res::RefTrees>,
+    ) -> Result<(), ParseError> {
+        let node = ResNode::load(loader, path, refs)?;
         self.add_node(&node);
         Ok(())
     }

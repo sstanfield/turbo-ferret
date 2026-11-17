@@ -68,8 +68,9 @@ pub enum Axis {
 }
 
 impl Axis {
+    /// "x..." is X, anything else Y. TB: `*axis == 'x' ? AXIS_X : AXIS_Y`
     pub fn parse(s: &str) -> Axis {
-        if s == "y" { Axis::Y } else { Axis::X }
+        if s.starts_with('x') { Axis::X } else { Axis::Y }
     }
     pub fn other(self) -> Axis {
         match self {

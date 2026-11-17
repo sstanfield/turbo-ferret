@@ -110,8 +110,13 @@ pub struct SkinElement {
     pub bitmap_file: String,
     pub bitmap: Option<FragmentId>,
     pub kind: SkinKind,
+    /// `cut` and `expand` as they are used: the file's values, scaled when the
+    /// bitmap in use is the one for the screen's DPI. Set when bitmaps are loaded.
     pub cut: i32,
     pub expand: i32,
+    /// `cut` and `expand` as the skin file gives them.
+    pub(crate) file_cut: i32,
+    pub(crate) file_expand: i32,
     pub padding: Edges,
     pub sizes: SkinSizes,
     pub spacing: Option<i32>,
@@ -143,6 +148,8 @@ impl SkinElement {
             kind: SkinKind::StretchBox,
             cut: 0,
             expand: 0,
+            file_cut: 0,
+            file_expand: 0,
             padding: Edges::ZERO,
             sizes: SkinSizes::default(),
             spacing: None,

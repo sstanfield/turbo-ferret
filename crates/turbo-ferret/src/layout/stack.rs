@@ -216,9 +216,9 @@ pub fn measure(cx: &mut Ctx, s: &StackSettings, inner_sc: SizeConstraints) -> Pr
         let g = rot_gravity(cx.gravity(c), s.axis);
         ps.min.h = ps.min.h.max(cps.min.h);
         ps.pref.h = ps.pref.h.max(cps.pref.h);
-        ps.min.w += cps.min.w + ending;
-        ps.pref.w += cps.pref.w + ending;
-        ps.max.w += cps.max.w + ending;
+        ps.min.w = ps.min.w.saturating_add(cps.min.w.saturating_add(ending));
+        ps.pref.w = ps.pref.w.saturating_add(cps.pref.w.saturating_add(ending));
+        ps.max.w = ps.max.w.saturating_add(cps.max.w.saturating_add(ending));
         let h = wanted_height(s, g, &cps, cps.max.h);
         ps.max.h = ps.max.h.max(h);
         ps.dependency |= cps.dependency;
@@ -239,17 +239,17 @@ pub fn arrange(cx: &mut Ctx, s: &StackSettings) -> i32 {
 
     // Pass 1: totals.
     let mut items = Vec::with_capacity(n);
-    let mut total_pref = 0;
-    let mut total_min_diff = 0;
-    let mut total_max_diff = 0;
+    let mut total_pref: i32 = 0;
+    let mut total_min_diff: i32 = 0;
+    let mut total_max_diff: i32 = 0;
     for (i, &c) in kids.iter().enumerate() {
         let ending = if i + 1 < n { s.spacing } else { 0 };
         let ps = rot_ps(cx.preferred_size(c, inner_sc), s.axis);
         let g = rot_gravity(cx.gravity(c), s.axis);
-        total_pref += ps.pref.w + ending;
-        total_min_diff += ps.pref.w - ps.min.w;
+        total_pref = total_pref.saturating_add(ps.pref.w.saturating_add(ending));
+        total_min_diff = total_min_diff.saturating_add(ps.pref.w.saturating_sub(ps.min.w));
         if qualifies(s, g) {
-            total_max_diff += lr.w.min(ps.max.w) - ps.pref.w;
+            total_max_diff = total_max_diff.saturating_add(lr.w.min(ps.max.w).saturating_sub(ps.pref.w));
         }
         items.push((c, ps, g, ending));
     }

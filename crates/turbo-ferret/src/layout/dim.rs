@@ -56,7 +56,7 @@ impl DimensionConverter {
     }
 
     pub fn dp_to_px(&self, dp: i32) -> i32 {
-        round(self.dp_to_px_f(dp as f32)) as i32
+        clamp_px(round(self.dp_to_px_f(dp as f32)))
     }
 
     pub fn mm_to_px_f(&self, mm: f32) -> f32 {
@@ -67,22 +67,28 @@ impl DimensionConverter {
     }
 
     pub fn mm_to_px(&self, mm: i32) -> i32 {
-        round(self.mm_to_px_f(mm as f32)) as i32
+        clamp_px(round(self.mm_to_px_f(mm as f32)))
     }
 
     /// "10", "10dp", "10px", "3mm". TB: GetPxFromString
     pub fn px_from_str(&self, s: &str, default: i32) -> i32 {
+        self.px_from_str_opt(s).unwrap_or(default)
+    }
+
+    /// Like [`px_from_str`](Self::px_from_str): `None` if `s` is not a dimension
+    /// (it does not start like a number).
+    pub fn px_from_str_opt(&self, s: &str) -> Option<i32> {
         if !starts_number(s) {
-            return default;
+            return None;
         }
         let v = atoi(s);
-        if s.len() > 2 && s.ends_with("px") {
-            v
+        Some(if s.len() > 2 && s.ends_with("px") {
+            clamp_px(v as f32)
         } else if s.len() > 2 && s.ends_with("mm") {
             self.mm_to_px(v)
         } else {
             self.dp_to_px(v)
-        }
+        })
     }
 
     pub fn px_from_str_f(&self, s: &str, default: f32) -> f32 {
@@ -101,11 +107,17 @@ impl DimensionConverter {
 
     /// TB: GetPxFromValue
     pub fn px_from_value(&self, v: &Value, default: i32) -> i32 {
+        self.px_from_value_opt(v).unwrap_or(default)
+    }
+
+    /// Like [`px_from_value`](Self::px_from_value): `None` if the value is not a
+    /// dimension.
+    pub fn px_from_value_opt(&self, v: &Value) -> Option<i32> {
         match v {
-            Value::Int(i) => self.dp_to_px(*i),
-            Value::Float(f) => round(self.dp_to_px_f(*f)) as i32,
-            Value::Str(s) => self.px_from_str(s, default),
-            _ => default,
+            Value::Int(i) => Some(self.dp_to_px(*i)),
+            Value::Float(f) => Some(clamp_px(round(self.dp_to_px_f(*f)))),
+            Value::Str(s) => self.px_from_str_opt(s),
+            _ => None,
         }
     }
 
@@ -117,6 +129,14 @@ impl DimensionConverter {
             _ => default,
         }
     }
+}
+
+/// The largest dimension, in pixels. Resources can hold any number; sizes are
+/// added up all over the layout code, and this keeps the sums far from overflow.
+pub const MAX_PX: i32 = 1_000_000;
+
+fn clamp_px(v: f32) -> i32 {
+    if v.is_nan() { 0 } else { v.clamp(-(MAX_PX as f32), MAX_PX as f32) as i32 }
 }
 
 /// TB: tb_value.cpp is_start_of_number

@@ -28,7 +28,8 @@ impl Ui {
     /// are uploaded to the renderer on the next paint. TB: TBSkin::Load
     pub fn load_skin(&mut self, path: &str, override_path: Option<&str>) -> Result<(), SkinError> {
         let dpi = self.config.dpi;
-        let r = self.skin.load(&mut *self.services.loader, &mut *self.services.images, path, override_path, dpi);
+        let Ui { skin, services, refs, .. } = self;
+        let r = skin.load_with_refs(&mut *services.loader, &mut *services.images, path, override_path, dpi, Some(refs));
         self.dim = self.skin.dim.clone();
         self.skin_dirty = true;
         self.repaint = true;

@@ -29,6 +29,11 @@ pub const MAX_DEPTH: usize = 256;
 /// The deepest `@file` includes may nest (cycles are caught before this).
 pub const MAX_INCLUDE_DEPTH: usize = 32;
 
+/// The most files one parse may read with `@file`. Files that create no nodes are
+/// not stopped by [`MAX_NODES`], and ones that include each other twice double at
+/// every level.
+pub const MAX_INCLUDES: usize = 1024;
+
 /// The most nodes one parse may create, `@file` and `@include` copies included. Bounds
 /// the memory a small file can claim through repeated includes.
 pub const MAX_NODES: usize = 1 << 20;
@@ -63,6 +68,8 @@ pub struct ParseCtx<'a> {
     loader: Option<&'a mut dyn ResourceLoader>,
     refs: Option<&'a RefTrees>,
     include_stack: Vec<String>,
+    /// Files read with `@file` so far.
+    includes: usize,
     nodes: usize,
     /// Non-fatal problems, in the order found. TB: TBNodeTarget::OnError (debug print only).
     pub warnings: Vec<ParseError>,
@@ -76,6 +83,7 @@ impl<'a> ParseCtx<'a> {
             loader: None,
             refs: None,
             include_stack: Vec::new(),
+            includes: 0,
             nodes: 0,
             warnings: Vec::new(),
         }
@@ -354,8 +362,17 @@ impl Parser<'_, '_> {
                 return Ok(());
             }
         };
+        // One spelling per file, or "./a" would pass for another file than "a".
+        let path = normalize_path(&path);
         if self.ctx.include_stack.contains(&path) {
             self.warn(format!("Referenced file \"{path}\" includes itself"));
+            return Ok(());
+        }
+        // Files that include each other twice double at every level: a budget for
+        // the whole parse.
+        self.ctx.includes += 1;
+        if self.ctx.includes > MAX_INCLUDES {
+            self.warn(format!("More than {MAX_INCLUDES} referenced files. (\"{path}\" skipped)"));
             return Ok(());
         }
         if self.ctx.include_stack.len() >= MAX_INCLUDE_DEPTH {
@@ -499,8 +516,24 @@ fn is_start_of_reference(s: &str) -> bool {
     }
 }
 
-/// Replace backslash escapes: `\a \b \f \n \r \t \v \0 \" \' \\`, `\xXX` and `\uXXXX`.
-/// Unknown escapes are kept as they are.
+/// `path` without `.` segments, and with `dir/..` pairs removed.
+fn normalize_path(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for (i, part) in path.split('/').enumerate() {
+        match part {
+            "." => {}
+            "" if i > 0 => {}
+            ".." if parts.last().is_some_and(|p| !p.is_empty() && *p != "..") => {
+                parts.pop();
+            }
+            _ => parts.push(part),
+        }
+    }
+    parts.join("/")
+}
+
+/// Replace backslash escapes: `\a \b \f \n \r \t \v \" \' \\`, `\xXX` and `\uXXXX`.
+/// `\0` ends the value. Unknown escapes are kept as they are.
 ///
 /// TB read up to 4 hex digits for `\x` as well (it checked the wrong character); here
 /// `\x` takes up to 2. A hex escape of 0 produces nothing, as in TB; one that is not a
@@ -514,6 +547,10 @@ pub fn unescape(s: &str) -> Cow<'_, str> {
     while let Some(i) = rest.find('\\') {
         out.push_str(&rest[..i]);
         let after = &rest[i + 1..];
+        // TB wrote a NUL here, which ended its C string: the value ends.
+        if after.starts_with('0') {
+            return Cow::Owned(out);
+        }
         let simple = match after.as_bytes().first() {
             Some(b'a') => Some('\x07'),
             Some(b'b') => Some('\x08'),
@@ -522,7 +559,6 @@ pub fn unescape(s: &str) -> Cow<'_, str> {
             Some(b'r') => Some('\r'),
             Some(b't') => Some('\t'),
             Some(b'v') => Some('\x0b'),
-            Some(b'0') => Some('\0'),
             Some(b'"') => Some('"'),
             Some(b'\'') => Some('\''),
             Some(b'\\') => Some('\\'),

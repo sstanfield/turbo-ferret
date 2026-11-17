@@ -95,7 +95,7 @@ impl<'a, 'r> PaintCtx<'a, 'r> {
 
     /// Paint a skin element at `rect` with `state`. Returns the element used.
     pub fn draw_skin(&mut self, rect: Rect, skin: TbId, state: SkinState) -> Option<TbId> {
-        self.view.skin.paint_skin(self.painter, rect, skin, state, &self.view, self.id, 0)
+        self.view.skin.paint_skin(self.painter, rect, skin, state, &self.view, self.id)
     }
 
     /// Paint a skin element's overlays.
@@ -300,7 +300,7 @@ fn paint_node(v: &View<'_>, f: &mut Frame<'_>, p: &mut Painter, id: WidgetId, st
     p.set_translation(origin);
     p.set_opacity(opacity);
     let local = Rect::from_size(r.size());
-    let used = elem.and_then(|e| v.skin.paint_skin(p, local, e.id, state, v, id, 0));
+    let used = elem.and_then(|e| v.skin.paint_skin(p, local, e.id, state, v, id));
     #[cfg(feature = "debug")]
     if f.debug.settings.layout_bounds {
         // TB: TBWidget::InvokePaint (LAYOUT_BOUNDS)
@@ -374,7 +374,7 @@ fn paint_node(v: &View<'_>, f: &mut Frame<'_>, p: &mut Painter, id: WidgetId, st
                 if !has && fs.contains(WidgetState::FOCUSED) {
                     p.set_translation(child_offset);
                     p.set_opacity(opacity);
-                    v.skin.paint_skin(p, fnode.rect(), crate::tbid!("generic_focus"), fs, v, fw, 0);
+                    v.skin.paint_skin(p, fnode.rect(), crate::tbid!("generic_focus"), fs, v, fw);
                 }
             }
         }

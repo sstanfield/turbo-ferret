@@ -68,7 +68,8 @@ impl From<ParseError> for InflateError {
     }
 }
 
-/// Nodes whose names start with an uppercase letter may be widgets; others are properties.
+/// Nodes whose names start with an uppercase letter may be widgets; others are
+/// properties, unless a factory is registered under the name.
 fn is_widget_name(name: &str) -> bool {
     name.as_bytes().first().is_some_and(|c| c.is_ascii_uppercase())
 }
@@ -112,7 +113,7 @@ impl Ui {
 
     /// Load a language file additively.
     pub fn load_language(&mut self, path: &str) -> Result<(), ParseError> {
-        self.lang.load(&mut *self.services.loader, path)
+        self.lang.load_with_refs(&mut *self.services.loader, path, Some(&self.refs))
     }
 
     pub fn refs(&self) -> &RefTrees {
@@ -183,10 +184,10 @@ impl Ui {
         target: WidgetId,
         node: &ResNode,
     ) -> Result<Option<WidgetId>, InflateError> {
-        if !is_widget_name(&node.name) {
-            return Ok(None);
-        }
         let Some(f) = self.registry.map.get(&TbId::new(&node.name)).cloned() else {
+            if !is_widget_name(&node.name) {
+                return Ok(None);
+            }
             // TB skips nodes without a factory (resources also hold data such as
             // "WindowInfo"); a capitalized name is probably a missing factory, so warn.
             self.log(Level::Warn, format_args!("{}: no widget factory for \"{}\"", doc.file, node.name));
@@ -283,7 +284,8 @@ impl Ui {
         let skin = lk.node(node, "skin").map(|_| TbId::new(&lk.str(node, "skin", "")));
         let lp = lk.node(node, "lp").map(|lpn| {
             let mut lp = self.tree.layout_params.get(w).copied().unwrap_or_default();
-            let px = |name: &str| lk.node(lpn, name).map(|_| self.dim.px_from_str(&lk.str(lpn, name, ""), 0));
+            // (A value that is not a dimension leaves the parameter alone, as in TB.)
+            let px = |name: &str| lk.node(lpn, name).and_then(|_| self.dim.px_from_str_opt(&lk.str(lpn, name, "")));
             if let Some(v) = px("width") {
                 lp.set_width(v);
             }
@@ -400,6 +402,11 @@ impl Ui {
 impl Ui {
     pub fn px(&self, s: &str, default: i32) -> i32 {
         self.dim.px_from_str(s, default)
+    }
+
+    /// Like [`px`](Self::px): `None` if `s` is not a dimension.
+    pub fn px_opt(&self, s: &str) -> Option<i32> {
+        self.dim.px_from_str_opt(s)
     }
 
     pub fn layout_params_or_default(&self, id: WidgetId) -> LayoutParams {

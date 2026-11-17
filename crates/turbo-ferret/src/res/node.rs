@@ -130,10 +130,15 @@ impl ResNode {
 
     /// The node at `path`, creating any missing nodes (appended, with null values).
     /// TB: tb_node_tree.cpp TBNode::GetNode (GET_MISS_POLICY_CREATE)
+    ///
+    /// A path is followed [`MAX_DEPTH`](super::MAX_DEPTH) names deep at most (what
+    /// the parser allows too): trees are walked recursively.
     pub fn get_or_create(&mut self, path: &str) -> &mut ResNode {
         let mut node = self;
         let mut request = path;
-        while !request.is_empty() {
+        let mut depth = 0;
+        while !request.is_empty() && depth < super::MAX_DEPTH {
+            depth += 1;
             let (name, rest) = split_request(request);
             let index = match node.children.iter().position(|c| &*c.name == name) {
                 Some(i) => i,

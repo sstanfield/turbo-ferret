@@ -31,5 +31,7 @@ mod parser;
 mod refs;
 
 pub use node::{Lookup, ResNode};
-pub use parser::{MAX_DEPTH, MAX_INCLUDE_DEPTH, MAX_NODES, ParseCtx, ParseError, parse, parse_file, unescape};
+pub use parser::{
+    MAX_DEPTH, MAX_INCLUDE_DEPTH, MAX_INCLUDES, MAX_NODES, ParseCtx, ParseError, parse, parse_file, unescape,
+};
 pub use refs::{MAX_REF_HOPS, RefTrees};

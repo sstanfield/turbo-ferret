@@ -31,25 +31,46 @@ impl Skin {
         override_path: Option<&str>,
         screen_dpi: i32,
     ) -> Result<(), SkinError> {
-        self.load_internal(loader, path, screen_dpi)?;
+        self.load_with_refs(loader, images, path, override_path, screen_dpi, None)
+    }
+
+    /// [`load`](Self::load), with the ref trees that the skin files' `@if` conditions
+    /// and `@include @tree>...` lines may use.
+    pub fn load_with_refs(
+        &mut self,
+        loader: &mut dyn ResourceLoader,
+        images: &mut dyn ImageDecoder,
+        path: &str,
+        override_path: Option<&str>,
+        screen_dpi: i32,
+        refs: Option<&crate::res::RefTrees>,
+    ) -> Result<(), SkinError> {
+        self.load_internal(loader, path, screen_dpi, refs)?;
         if let Some(o) = override_path {
-            self.load_internal(loader, o, screen_dpi)?;
+            self.load_internal(loader, o, screen_dpi, refs)?;
         }
         self.reload_bitmaps(loader, images)
     }
 
     /// TB: TBSkin::LoadInternal
-    fn load_internal(&mut self, loader: &mut dyn ResourceLoader, path: &str, screen_dpi: i32) -> Result<(), SkinError> {
-        let mut node = ResNode::load(loader, path, None)?;
+    fn load_internal(
+        &mut self,
+        loader: &mut dyn ResourceLoader,
+        path: &str,
+        screen_dpi: i32,
+        refs: Option<&crate::res::RefTrees>,
+    ) -> Result<(), SkinError> {
+        let mut node = ResNode::load(loader, path, refs)?;
         if node.get("description").is_some() {
-            let base = node.int("description>base-dpi", 96);
+            // (A DPI that is not positive is not one: dimensions divide by it.)
+            let base = Some(node.int("description>base-dpi", 96)).filter(|&d| d > 0).unwrap_or(96);
             let mut supported = base;
             if let Some(sn) = node.get("description>supported-dpi") {
                 if let Some(arr) = sn.value.as_array() {
+                    let far = |c: i32| (i64::from(c) - i64::from(screen_dpi)).abs();
                     let mut best = 0;
-                    for v in arr {
-                        let c = v.as_int();
-                        if best == 0 || (c - screen_dpi).abs() < (best - screen_dpi).abs() {
+                    for c in arr.iter().map(|v| v.as_int()).filter(|&c| c > 0) {
+                        if best == 0 || far(c) < far(best) {
                             best = c;
                         }
                     }
@@ -103,8 +124,10 @@ impl Skin {
         if let Some(b) = s(n, "bitmap") {
             e.bitmap_file = loader.resolve(skin_path, &b);
         }
-        e.cut = n.int("cut", e.cut);
-        e.expand = n.int("expand", e.expand);
+        // (Scaled for the bitmap's DPI when the bitmaps are loaded.)
+        e.file_cut = n.int("cut", e.file_cut);
+        e.file_expand = n.int("expand", e.file_expand);
+        (e.cut, e.expand) = (e.file_cut, e.file_expand);
         if let Some(p) = n.get("padding") {
             let px = |v: &Value| dc.px_from_value(v, 0);
             e.padding = match p.value.as_array() {
@@ -113,7 +136,8 @@ impl Skin {
                 _ => Edges::all(px(&p.value)),
             };
         }
-        let opt = |path: &str, cur: Option<i32>| n.get(path).map(|v| dc.px_from_value(&v.value, 0)).or(cur);
+        // (A value that is not a dimension keeps what the element has, as in TB.)
+        let opt = |path: &str, cur: Option<i32>| n.get(path).and_then(|v| dc.px_from_value_opt(&v.value)).or(cur);
         let px = |path: &str, cur: i32| n.get(path).map(|v| dc.px_from_value(&v.value, cur)).unwrap_or(cur);
         e.sizes.width = opt("width", e.sizes.width);
         e.sizes.height = opt("height", e.sizes.height);
@@ -222,14 +246,21 @@ pub fn premultiply(rgba: &mut [u8]) {
 }
 
 /// TB: TBSkinElement::SetBitmapDPI (cut and expand scale with a high-DPI bitmap).
+///
+/// TB scaled the values in place, once per element. Here a `Skin` lives on and may
+/// be loaded again (another skin file on top, a new DPI), so the values in use are
+/// worked out from the file's every time.
 fn set_bitmap_dpi(e: &mut SkinElement, dc: &DimensionConverter, bitmap_dpi: i32) {
-    if e.bitmap_dpi != 0 {
-        return;
-    }
-    if dc.need_conversion() && bitmap_dpi == dc.dst_dpi {
-        e.expand = e.expand * dc.dst_dpi / dc.src_dpi;
-        e.cut = e.cut * dc.dst_dpi / dc.src_dpi;
-    }
+    let scale = |v: i32| -> i32 {
+        if dc.need_conversion() && bitmap_dpi == dc.dst_dpi && dc.src_dpi > 0 {
+            let scaled = i64::from(v) * i64::from(dc.dst_dpi) / i64::from(dc.src_dpi);
+            scaled.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+        } else {
+            v
+        }
+    };
+    e.expand = scale(e.file_expand);
+    e.cut = scale(e.file_cut);
     e.bitmap_dpi = bitmap_dpi;
 }
 
