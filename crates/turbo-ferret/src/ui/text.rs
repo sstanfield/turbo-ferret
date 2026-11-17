@@ -2,8 +2,9 @@
 //! manager (wired when fonts land; until then a fixed-width fallback).
 
 use crate::arena::WidgetId;
-use crate::font::FontDesc;
+use crate::font::{FontDesc, FontManager, LoadCtx};
 use crate::geom::Point;
+use crate::id::TbId;
 use crate::value::Value;
 
 use super::Ui;
@@ -12,14 +13,41 @@ use super::node::NodeFlags;
 impl Ui {
     /// Width of `text` in `font`. TB: TBFontFace::GetStringWidth
     pub fn text_width(&self, font: FontDesc, text: &str) -> i32 {
-        let _ = font;
-        text.chars().count() as i32 * 8
+        self.fonts.face(font).string_width(text)
     }
 
     /// Line height of `font`. TB: TBFontFace::GetHeight
     pub fn font_height(&self, font: FontDesc) -> i32 {
-        let _ = font;
-        16
+        self.fonts.face(font).height()
+    }
+
+    pub fn fonts(&self) -> &FontManager {
+        &self.fonts
+    }
+
+    pub fn fonts_mut(&mut self) -> &mut FontManager {
+        &mut self.fonts
+    }
+
+    /// Register a font file under a name. TB: TBFontManager::AddFontInfo
+    pub fn add_font(&mut self, name: &str, path: &str) -> TbId {
+        self.fonts.add_font(name, path)
+    }
+
+    /// Load a face (font + size) through the services. TB: CreateFontFace
+    pub fn create_font_face(&mut self, desc: FontDesc) -> bool {
+        let mut cx = LoadCtx::new(&mut *self.services.loader, &mut *self.services.images);
+        self.fonts.create_face(desc, &mut cx)
+    }
+
+    /// Create the face and make it the default for widgets without a font.
+    pub fn set_default_font(&mut self, desc: FontDesc) -> bool {
+        let ok = self.create_font_face(desc);
+        self.fonts.set_default(desc);
+        self.default_font = desc;
+        let root = self.root();
+        self.invoke_font_changed(root);
+        ok
     }
 
     /// Where the current press started, in the captured widget's coordinates.

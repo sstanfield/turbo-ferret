@@ -116,6 +116,7 @@ pub struct Ui {
     pub(crate) dim: DimensionConverter,
     pub(crate) skin: crate::skin::Skin,
     pub(crate) anims: crate::anim::Animations,
+    pub(crate) fonts: crate::font::FontManager,
 }
 
 impl Ui {
@@ -144,6 +145,7 @@ impl Ui {
             dim: DimensionConverter::new(96, 96, 96),
             skin: crate::skin::Skin::default(),
             anims: Default::default(),
+            fonts: crate::font::FontManager::new(),
         };
         crate::widgets::register_builtins(&mut ui);
         ui
@@ -489,11 +491,16 @@ impl Ui {
 
     /// TB: SetFontDescription
     pub fn set_font(&mut self, id: WidgetId, font: Option<FontDesc>) {
-        let Some(n) = self.tree.live_mut(id) else { return };
+        let Some(n) = self.tree.live(id) else { return };
         if n.font == font {
             return;
         }
-        n.font = font;
+        if let Some(f) = font {
+            self.create_font_face(f);
+        }
+        if let Some(n) = self.tree.live_mut(id) {
+            n.font = font;
+        }
         self.invoke_font_changed(id);
     }
 

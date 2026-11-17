@@ -5,7 +5,7 @@
 //! parameters (H-17), and the painter batches into the narrow renderer.
 
 use crate::arena::WidgetId;
-use crate::font::FontDesc;
+use crate::font::{FontDesc, FontManager};
 use crate::geom::{Color, Point, Rect};
 use crate::id::TbId;
 use crate::layout::size::Visibility;
@@ -29,6 +29,7 @@ pub struct PaintCtx<'a, 'r> {
     pub(crate) font: FontDesc,
     pub(crate) now: Millis,
     pub(crate) repaint: &'a mut bool,
+    pub(crate) fonts: &'a mut FontManager,
 }
 
 impl<'a, 'r> PaintCtx<'a, 'r> {
@@ -130,17 +131,26 @@ impl<'a, 'r> PaintCtx<'a, 'r> {
 
     /// Width of `text` in this widget's font.
     pub fn text_width(&self, text: &str) -> i32 {
-        text.chars().count() as i32 * 8
+        self.fonts.face(self.font).string_width(text)
     }
 
     /// Line height of this widget's font.
     pub fn font_height(&self) -> i32 {
-        16
+        self.fonts.face(self.font).height()
     }
 
-    /// Draw `text` with its top left at `pos` (local coordinates).
+    /// Draw `text` with its top left at `pos` (local coordinates) in this widget's font.
     pub fn draw_text(&mut self, pos: Point, color: Color, text: &str) {
-        let _ = (pos, color, text);
+        self.fonts.draw_text(self.painter, self.font, pos, color, text);
+    }
+
+    /// Draw `text` in a specific font.
+    pub fn draw_text_with(&mut self, font: FontDesc, pos: Point, color: Color, text: &str) {
+        self.fonts.draw_text(self.painter, font, pos, color, text);
+    }
+
+    pub fn fonts(&self) -> &FontManager {
+        self.fonts
     }
 
     pub fn painter(&mut self) -> &mut Painter<'r> {
@@ -175,20 +185,29 @@ impl Ui {
         let vp = self.viewport;
         let root = self.root();
         let now = self.now;
-        let Ui { tree, input, skin, repaint, default_font, .. } = self;
+        let Ui { tree, input, skin, repaint, default_font, fonts, .. } = self;
+        fonts.begin_frame();
         skin.atlas.upload_all(renderer);
         let mut painter = Painter::new(renderer, vp);
         let view = View { tree, input, skin };
         let st =
             PaintState { offset: Point::ZERO, opacity: 1.0, text_color: skin.defaults.text_color, font: *default_font };
         let mut again = false;
-        paint_node(&view, &mut painter, root, st, now, &mut again);
+        paint_node(&view, fonts, &mut painter, root, st, now, &mut again);
         painter.finish();
         *repaint = again;
     }
 }
 
-fn paint_node(v: &View<'_>, p: &mut Painter, id: WidgetId, st: PaintState, now: Millis, again: &mut bool) {
+fn paint_node(
+    v: &View<'_>,
+    fonts: &mut FontManager,
+    p: &mut Painter,
+    id: WidgetId,
+    st: PaintState,
+    now: Millis,
+    again: &mut bool,
+) {
     let Some(n) = v.node(id) else { return };
     let r = n.rect();
     if n.opacity() == 0.0 || r.is_empty() || n.visibility() != Visibility::Visible {
@@ -221,6 +240,7 @@ fn paint_node(v: &View<'_>, p: &mut Painter, id: WidgetId, st: PaintState, now: 
             font,
             now,
             repaint: again,
+            fonts,
         };
         b.paint(&mut cx);
     }
@@ -239,7 +259,7 @@ fn paint_node(v: &View<'_>, p: &mut Painter, id: WidgetId, st: PaintState, now: 
         for &c in n.children() {
             let Some(cn) = v.node(c) else { continue };
             if clip.intersects(&cn.rect().offset_by(child_offset)) {
-                paint_node(v, p, c, child_st, now, again);
+                paint_node(v, fonts, p, c, child_st, now, again);
             }
         }
         // Overlays are painted after all children. TB: OnPaintChildren overlay loop
@@ -290,6 +310,7 @@ fn paint_node(v: &View<'_>, p: &mut Painter, id: WidgetId, st: PaintState, now: 
             font,
             now,
             repaint: again,
+            fonts,
         };
         b.paint_after_children(&mut cx);
     }

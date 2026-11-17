@@ -43,7 +43,7 @@ pub mod widgets;
 
 pub use arena::{Arena, SideTable, WidgetId};
 pub use event::{Event, EventKind, Modifiers, SpecialKey};
-pub use font::FontDesc;
+pub use font::{FontBackend, FontDesc, FontFace, FontManager, GlyphSource, LoadCtx};
 pub use geom::{Color, Edges, Point, Rect, Region, Size};
 pub use id::TbId;
 pub use lang::Language;

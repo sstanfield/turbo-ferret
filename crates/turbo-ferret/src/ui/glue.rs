@@ -123,6 +123,7 @@ impl Ui {
     /// them. TB: TBRendererListener::OnContextLost/Restored
     pub fn renderer_lost(&mut self) {
         self.skin.atlas.renderer_lost();
+        self.fonts.renderer_lost();
         self.repaint = true;
     }
 }
