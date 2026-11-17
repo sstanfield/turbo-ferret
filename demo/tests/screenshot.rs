@@ -47,3 +47,18 @@ fn demo_renders_headless() {
     demo.ui.pointer_up(p, Modifiers::NONE);
     assert_eq!(demo.ui.children(root).len(), before + 1, "a window opened");
 }
+
+#[test]
+fn demo_test_windows_headless() {
+    let size = Size::new(1024, 700);
+    let mut demo = Demo::new(&default_resource_root(), size, 96);
+    for f in ["test_skin_conditions01.tb.txt", "test_skin_conditions02.tb.txt", "test_layout01.tb.txt", "test_connections.tb.txt"] {
+        assert!(open_resource_window(&mut demo.ui, &format!("demo01/ui_resources/{f}")).is_some(), "{f}");
+    }
+    demo.frame(0);
+    demo.frame(1000);
+    let mut r = SoftRenderer::new(size);
+    r.clear(Color::BLACK);
+    demo.ui.paint(&mut r);
+    save(&r, "demo_screenshot2.png");
+}
