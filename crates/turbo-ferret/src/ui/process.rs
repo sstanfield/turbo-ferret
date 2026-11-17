@@ -4,8 +4,6 @@
 //! TB: TBAnimationManager::Update, TBMessageHandler::ProcessMessages,
 //! TBWidget::InvokeProcessStates, TBWidget::InvokeProcess.
 
-use alloc::vec::Vec;
-
 use crate::arena::WidgetId;
 use crate::msg::Millis;
 
@@ -25,7 +23,10 @@ impl Ui {
             ui.process_states();
             ui.process_skin_updates();
             let root = ui.root();
+            // Layout that is invalidated from here on waits for the next update.
+            ui.layout_pending = false;
             ui.process_node(root);
+            ui.work_left = ui.layout_pending || ui.states_dirty || ui.skin_dirty;
         });
     }
 
@@ -38,6 +39,11 @@ impl Ui {
         if self.has_running_animations() || self.has_running_scrollers() {
             min(self.now);
         }
+        // Work the last update left behind: layout invalidated while it was
+        // arranging, states or skins marked dirty while it processed.
+        if self.work_left {
+            min(self.now);
+        }
         if let Some(d) = self.msgs.next_due() {
             min(d.max(self.now));
         }
@@ -48,9 +54,9 @@ impl Ui {
     }
 
     fn deliver_messages(&mut self) {
-        let mut due = Vec::new();
-        self.msgs.take_due(self.now, &mut due);
-        for e in due {
+        // Messages posted while these are delivered wait for the next update.
+        let last = self.msgs.last_seq();
+        while let Some(e) = self.msgs.pop_due(self.now, last) {
             if self.tree.is_live(e.target) {
                 call_hook(self, e.target, |w, cx| w.on_message(cx, &e.msg));
             }

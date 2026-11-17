@@ -36,22 +36,30 @@ impl Ui {
         self.add_at(parent, w, Z::Top)
     }
 
+    /// If `parent` is gone (a stale id, or a widget that was removed), the new
+    /// widget is removed again at once: the id returned is then not live.
     pub fn add_at<W: Widget>(&mut self, parent: WidgetId, w: W, z: Z) -> WidgetId {
         let id = self.create(w);
-        self.attach(parent, id, z);
+        if !self.attach(parent, id, z) {
+            self.remove(id);
+        }
         id
     }
 
     pub fn add_boxed(&mut self, parent: WidgetId, b: Box<dyn Widget>, z: Z) -> WidgetId {
         let id = self.create_boxed(b);
-        self.attach(parent, id, z);
+        if !self.attach(parent, id, z) {
+            self.remove(id);
+        }
         id
     }
 
     /// Create and attach before or after `reference` (same parent).
     pub fn add_relative<W: Widget>(&mut self, reference: WidgetId, w: W, rel: ZRel) -> WidgetId {
         let id = self.create(w);
-        self.attach_relative(reference, id, rel);
+        if !self.attach_relative(reference, id, rel) {
+            self.remove(id);
+        }
         id
     }
 
@@ -161,6 +169,18 @@ impl Ui {
         if !self.tree.is_live(id) {
             return;
         }
+        // The widgets below it go too. TB: ~TBWidget removed each child in turn,
+        // which called its OnRemove.
+        let mut below = Vec::new();
+        self.tree.collect_subtree(id, &mut below);
+        for w in below.into_iter().filter(|&w| w != id) {
+            if self.tree.is_live(w) {
+                call_hook(self, w, |b, cx| b.on_removed(cx));
+            }
+        }
+        if !self.tree.is_live(id) {
+            return;
+        }
 
         // Window bookkeeping. TB: TBWindow::OnRemove
         if self.has_flag(id, NodeFlags::WINDOW) {
@@ -236,6 +256,11 @@ impl Ui {
     }
 
     fn die_inner(&mut self, id: WidgetId) {
+        // The root cannot go (and must not be left dying, which would take every
+        // widget out of hit testing and focus).
+        if id == self.root() {
+            return;
+        }
         let Some(n) = self.tree.live_mut(id) else { return };
         if n.flags.contains(NodeFlags::DYING) {
             return;
@@ -325,6 +350,7 @@ impl Ui {
             let Some(n) = self.tree.live_mut(c) else { break };
             n.measure_cache = None;
             n.flags.insert(NodeFlags::NEEDS_ARRANGE);
+            self.layout_pending = true;
             if n.visibility == Visibility::Gone || n.flags.contains(NodeFlags::LAYOUT_BOUNDARY) {
                 break;
             }
@@ -369,6 +395,9 @@ impl Ui {
         }
         #[cfg(feature = "debug")]
         self.debug_mark_measured(id);
+        // Whether this measure had to use a stale size somewhere below (a busy
+        // widget): then it is not cached.
+        let outer_incomplete = core::mem::take(&mut self.measure_incomplete);
         let pad = self.padding(id);
         let inner = sc.constrain_by_padding(pad.horizontal(), pad.vertical());
         let r = call_hook(self, id, |w, cx| {
@@ -376,8 +405,17 @@ impl Ui {
             (w.measure_content(cx, inner), adds)
         });
         let Some((mut ps, adds_skin)) = r else {
-            return cached.map(|c| c.1).unwrap_or(PreferredSize::ZERO);
+            // One of its own hooks is running, so it cannot be measured now: answer
+            // with its last size, and look again when the hook has returned.
+            self.measure_incomplete = true;
+            if self.is_busy(id) && !self.pending.measured_busy.contains(&id) {
+                self.pending.measured_busy.push(id);
+            }
+            let last = self.tree.live(id).and_then(|n| n.last_ps);
+            return cached.map(|c| c.1).or(last).unwrap_or(PreferredSize::ZERO);
         };
+        let incomplete = self.measure_incomplete;
+        self.measure_incomplete = outer_incomplete || incomplete;
         if adds_skin {
             self.apply_skin_sizes(id, &mut ps);
         }
@@ -388,7 +426,10 @@ impl Ui {
             lp.apply(&mut ps);
         }
         if let Some(n) = self.tree.live_mut(id) {
-            n.measure_cache = Some((sc, ps));
+            if !incomplete {
+                n.measure_cache = Some((sc, ps));
+            }
+            n.last_ps = Some(ps);
         }
         ps
     }
@@ -427,6 +468,11 @@ impl Ui {
 
     /// Set the rect to the preferred size (keeping the position).
     pub fn resize_to_preferred(&mut self, id: WidgetId) {
+        if self.is_busy(id) {
+            // From one of its own hooks: when it returns, so it can be measured.
+            self.when_free(id, move |ui| ui.resize_to_preferred(id));
+            return;
+        }
         let ps = self.preferred_size(id, SizeConstraints::NONE);
         let r = self.rect(id);
         self.set_rect(id, crate::geom::Rect::new(r.x, r.y, ps.pref.w, ps.pref.h));

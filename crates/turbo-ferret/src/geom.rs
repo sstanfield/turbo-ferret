@@ -21,31 +21,29 @@ impl Point {
 impl Add for Point {
     type Output = Point;
     fn add(self, o: Point) -> Point {
-        Point::new(self.x + o.x, self.y + o.y)
+        Point::new(self.x.saturating_add(o.x), self.y.saturating_add(o.y))
     }
 }
 impl Sub for Point {
     type Output = Point;
     fn sub(self, o: Point) -> Point {
-        Point::new(self.x - o.x, self.y - o.y)
+        Point::new(self.x.saturating_sub(o.x), self.y.saturating_sub(o.y))
     }
 }
 impl AddAssign for Point {
     fn add_assign(&mut self, o: Point) {
-        self.x += o.x;
-        self.y += o.y;
+        *self = *self + o;
     }
 }
 impl SubAssign for Point {
     fn sub_assign(&mut self, o: Point) {
-        self.x -= o.x;
-        self.y -= o.y;
+        *self = *self - o;
     }
 }
 impl Neg for Point {
     type Output = Point;
     fn neg(self) -> Point {
-        Point::new(-self.x, -self.y)
+        Point::new(self.x.saturating_neg(), self.y.saturating_neg())
     }
 }
 
@@ -95,11 +93,13 @@ impl Rect {
     pub const fn size(&self) -> Size {
         Size::new(self.w, self.h)
     }
+    // Coordinates come from resources and hosts: the sums saturate instead of
+    // overflowing (TB's wrapped).
     pub const fn right(&self) -> i32 {
-        self.x + self.w
+        self.x.saturating_add(self.w)
     }
     pub const fn bottom(&self) -> i32 {
-        self.y + self.h
+        self.y.saturating_add(self.h)
     }
     pub const fn is_empty(&self) -> bool {
         self.w <= 0 || self.h <= 0
@@ -108,10 +108,15 @@ impl Rect {
         self.w < 0 || self.h < 0
     }
     pub const fn contains(&self, p: Point) -> bool {
-        p.x >= self.x && p.y >= self.y && p.x < self.x + self.w && p.y < self.y + self.h
+        p.x >= self.x && p.y >= self.y && p.x < self.right() && p.y < self.bottom()
     }
     pub const fn shrink(&self, l: i32, t: i32, r: i32, b: i32) -> Rect {
-        Rect::new(self.x + l, self.y + t, self.w - l - r, self.h - t - b)
+        Rect::new(
+            self.x.saturating_add(l),
+            self.y.saturating_add(t),
+            self.w.saturating_sub(l).saturating_sub(r),
+            self.h.saturating_sub(t).saturating_sub(b),
+        )
     }
     pub const fn shrink_edges(&self, e: Edges) -> Rect {
         self.shrink(e.left, e.top, e.right, e.bottom)
@@ -120,13 +125,13 @@ impl Rect {
         self.shrink(-l, -t, -r, -b)
     }
     pub const fn shrink_xy(&self, tx: i32, ty: i32) -> Rect {
-        Rect::new(self.x + tx, self.y + ty, self.w - tx * 2, self.h - ty * 2)
+        self.shrink(tx, ty, tx, ty)
     }
     pub const fn expand_xy(&self, tx: i32, ty: i32) -> Rect {
         self.shrink_xy(-tx, -ty)
     }
     pub const fn offset(&self, dx: i32, dy: i32) -> Rect {
-        Rect::new(self.x + dx, self.y + dy, self.w, self.h)
+        Rect::new(self.x.saturating_add(dx), self.y.saturating_add(dy), self.w, self.h)
     }
     pub const fn offset_by(&self, p: Point) -> Rect {
         self.offset(p.x, p.y)
@@ -137,7 +142,7 @@ impl Rect {
         if self.is_empty() || r.is_empty() {
             return false;
         }
-        self.x + self.w > r.x && self.x < r.x + r.w && self.y + self.h > r.y && self.y < r.y + r.h
+        self.right() > r.x && self.x < r.right() && self.bottom() > r.y && self.y < r.bottom()
     }
 
     /// Move inside `b` (clamped; a rect larger than `b` is aligned to its top left).

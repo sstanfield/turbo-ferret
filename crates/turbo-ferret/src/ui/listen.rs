@@ -66,7 +66,12 @@ impl Ui {
             return None;
         }
         let id = self.listeners.arena.insert(Some(l));
-        self.tree.widget_listeners.get_or_insert_with(widget, Vec::new).push(id);
+        let arena = &self.listeners.arena;
+        let list = self.tree.widget_listeners.get_or_insert_with(widget, Vec::new);
+        // Listeners removed since are still listed here: drop them now, so a widget
+        // whose listeners come and go does not collect them.
+        list.retain(|&i| arena.contains(i));
+        list.push(id);
         Some(id)
     }
 
@@ -82,7 +87,8 @@ impl Ui {
     pub fn remove_listener(&mut self, id: ListenerId) {
         self.listeners.arena.remove(id);
         self.listeners.global.retain(|&g| g != id);
-        // Per-widget lists drop stale ids lazily (lookups fail).
+        // Per-widget lists drop stale ids when a listener is next added to them
+        // (lookups of stale ids fail).
     }
 
     /// Call `f` on each listener in `ids` (taken out of its slot during the call).

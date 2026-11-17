@@ -64,6 +64,9 @@ pub struct Node {
     pub(crate) state: WidgetState,
     pub(crate) flags: NodeFlags,
     pub(crate) measure_cache: Option<(SizeConstraints, PreferredSize)>,
+    /// The last size measured, kept when the cache is invalidated: the answer while
+    /// the widget is busy and cannot be measured.
+    pub(crate) last_ps: Option<PreferredSize>,
     pub(crate) type_name: &'static str,
     /// `Widget::extra_padding` as of the last put-back (used while the behaviour is out).
     pub(crate) extra_pad: crate::geom::Edges,
@@ -94,6 +97,7 @@ impl Node {
             state: WidgetState::NONE,
             flags: NodeFlags::NONE,
             measure_cache: None,
+            last_ps: None,
             type_name: b.type_name(),
             extra_pad: crate::geom::Edges::ZERO,
             axis: b.axis(),

@@ -220,8 +220,38 @@ pub(crate) fn call_hook<R>(ui: &mut Ui, id: WidgetId, f: impl FnOnce(&mut dyn Wi
             ui.depth -= 1;
         }
     }
+    after_hook(ui, id);
     if ui.depth == 0 {
         ui.flush();
     }
     Some(r)
+}
+
+/// What had to wait for a hook of `id` to return: see `Pending`. (Not generic, so
+/// it can call `call_hook` itself.)
+fn after_hook(ui: &mut Ui, id: WidgetId) {
+    // What had to wait for this hook to return.
+    if !ui.pending.measured_busy.is_empty() {
+        if let Some(i) = ui.pending.measured_busy.iter().position(|&w| w == id) {
+            ui.pending.measured_busy.swap_remove(i);
+            ui.invalidate_layout(id);
+        }
+    }
+    if !ui.pending.arrange_from.is_empty() {
+        if let Some(i) = ui.pending.arrange_from.iter().position(|&(w, _)| w == id) {
+            let (_, old) = ui.pending.arrange_from.swap_remove(i);
+            let new = ui.rect(id).size();
+            if new != old {
+                ui.depth += 1;
+                call_hook(ui, id, |w, cx| w.arrange(cx, old, new));
+                ui.depth -= 1;
+            }
+        }
+    }
+    while let Some(i) = ui.pending.when_free.iter().position(|(w, _)| *w == id) {
+        let (_, f) = ui.pending.when_free.remove(i);
+        ui.depth += 1;
+        f(ui);
+        ui.depth -= 1;
+    }
 }

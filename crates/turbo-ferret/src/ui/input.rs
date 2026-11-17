@@ -253,7 +253,7 @@ impl Ui {
             }
             if let Some(c) = self.input.captured {
                 if touch && self.has_flag(c, NodeFlags::WANT_LONG_CLICK) {
-                    let at = self.now + self.config.long_click_delay_ms as Millis;
+                    let at = self.now.saturating_add(self.config.long_click_delay_ms as Millis);
                     self.input.long_click = Some(super::input::LongClick { widget: c, at, touch });
                 }
                 if let Some(win) = self.tree.parent_window(c) {

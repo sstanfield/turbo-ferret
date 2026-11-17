@@ -298,8 +298,11 @@ impl Ui {
             return;
         }
         let now = self.now;
-        let order = core::mem::take(&mut self.anims.order);
-        let mut keep = Vec::with_capacity(order.len());
+        // The list stays in place while it is walked, so animations started or
+        // aborted by what this pass triggers (an `arrange` hook, an `on_die`, a
+        // custom animation) find the running ones. Ones started now are stepped in
+        // the next update.
+        let order = self.anims.order.clone();
         for id in order {
             let Some(a) = self.anims.arena.get_mut(id) else { continue };
             if a.adjust_start {
@@ -313,25 +316,34 @@ impl Ui {
             }
             let p = a.curve.apply(t);
             let curve = a.curve;
-            let Some(mut kind) = a.kind.take() else { continue };
+            // A built-in animation is stepped on a copy and stays findable by its
+            // target; an app animation has to be taken out.
+            let mut kind = match &mut a.kind {
+                Some(Kind::Builtin(s)) => Kind::Builtin(*s),
+                taken => match taken.take() {
+                    Some(k) => k,
+                    None => continue,
+                },
+            };
             let alive = self.step_anim(&mut kind, p);
+            let Some(a) = self.anims.arena.get_mut(id) else {
+                // Aborted or replaced during its own step.
+                if let Kind::Custom(_) = kind {
+                    self.finish_anim(kind, curve, false, true);
+                }
+                continue;
+            };
             if !alive {
                 self.anims.arena.remove(id);
-                continue;
-            }
-            if t >= 1.0 {
+                self.anims.order.retain(|&x| x != id);
+            } else if t >= 1.0 {
                 self.anims.arena.remove(id);
+                self.anims.order.retain(|&x| x != id);
                 self.finish_anim(kind, curve, true, false);
             } else {
-                if let Some(a) = self.anims.arena.get_mut(id) {
-                    a.kind = Some(kind);
-                }
-                keep.push(id);
+                a.kind = Some(kind);
             }
         }
-        // Animations started during the pass were pushed onto the (empty) list.
-        keep.append(&mut self.anims.order);
-        self.anims.order = keep;
         self.repaint = true;
     }
 

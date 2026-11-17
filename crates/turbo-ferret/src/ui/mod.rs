@@ -88,7 +88,18 @@ pub(crate) struct Pending {
     pub free: Vec<WidgetId>,
     /// Widgets that started dying inside their own hook.
     pub die_when_free: Vec<WidgetId>,
+    /// Widgets that were measured while one of their hooks ran (with their last
+    /// known size): their layout is invalidated when the hook returns.
+    pub measured_busy: Vec<WidgetId>,
+    /// Widgets resized while one of their hooks ran, with the size they had: they
+    /// are arranged when the hook returns.
+    pub arrange_from: Vec<(WidgetId, Size)>,
+    /// Work on a widget that needs its hooks, asked for while one of them ran.
+    pub when_free: Vec<(WidgetId, Deferred)>,
 }
+
+/// See [`Pending::when_free`].
+pub(crate) type Deferred = alloc::boxed::Box<dyn FnOnce(&mut Ui)>;
 
 pub struct Ui {
     pub(crate) tree: Tree,
@@ -105,6 +116,12 @@ pub struct Ui {
     pub(crate) repaint: bool,
     /// Widget states need `on_process_states` (TB: update_widget_states).
     pub(crate) states_dirty: bool,
+    /// Layout was invalidated since the last update started arranging.
+    pub(crate) layout_pending: bool,
+    /// The last update left layout, states or skins to process: update again.
+    pub(crate) work_left: bool,
+    /// A measure in progress used the stale size of a busy widget.
+    pub(crate) measure_incomplete: bool,
     /// Skin elements need re-resolving for strong overrides (TB: update_skin_states).
     pub(crate) skin_dirty: bool,
     pub(crate) viewport: Size,
@@ -142,6 +159,9 @@ impl Ui {
             depth: 0,
             repaint: true,
             states_dirty: true,
+            layout_pending: true,
+            work_left: false,
+            measure_incomplete: false,
             skin_dirty: true,
             viewport: Size::ZERO,
             default_font: FontDesc::default(),
@@ -414,7 +434,30 @@ impl Ui {
         n.rect = r;
         self.repaint = true;
         if old.size() != r.size() {
-            call_hook(self, id, |w, cx| w.arrange(cx, old.size(), r.size()));
+            if self.is_busy(id) {
+                // Resized from inside one of its own hooks: arrange when that hook
+                // returns, from the size it had first. (TB called OnResized
+                // re-entrantly.)
+                if !self.pending.arrange_from.iter().any(|&(w, _)| w == id) {
+                    self.pending.arrange_from.push((id, old.size()));
+                }
+            } else {
+                call_hook(self, id, |w, cx| w.arrange(cx, old.size(), r.size()));
+            }
+        }
+    }
+
+    /// True while one of the widget's own hooks is running (its behaviour is out).
+    pub(crate) fn is_busy(&self, id: WidgetId) -> bool {
+        self.tree.live(id).is_some_and(|n| n.behaviour.is_none())
+    }
+
+    /// Run `f` now, or when the hook of `id` that is running returns.
+    pub(crate) fn when_free(&mut self, id: WidgetId, f: impl FnOnce(&mut Ui) + 'static) {
+        if self.is_busy(id) {
+            self.pending.when_free.push((id, alloc::boxed::Box::new(f)));
+        } else {
+            f(self);
         }
     }
 
@@ -700,7 +743,7 @@ impl Ui {
     }
 
     pub fn post_message_delayed(&mut self, target: WidgetId, id: TbId, data: Value, delay_ms: u32) {
-        let at = self.now + delay_ms as Millis;
+        let at = self.now.saturating_add(delay_ms as Millis);
         self.msgs.post_at(target, Message { id, data }, at);
     }
 

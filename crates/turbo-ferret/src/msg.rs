@@ -64,12 +64,25 @@ impl MessageQueue {
         self.immediate.iter().chain(self.delayed.iter()).any(|e| e.target == target && e.msg.id == id)
     }
 
-    /// Take everything due at `now`: delayed first (in fire order), then immediate.
-    /// Messages posted while these are delivered wait for the next call.
-    pub fn take_due(&mut self, now: Millis, out: &mut Vec<Entry>) {
-        let n = self.delayed.partition_point(|e| e.fire_at <= now);
-        out.extend(self.delayed.drain(..n));
-        out.extend(self.immediate.drain(..));
+    /// The number of the last message posted. With [`pop_due`](Self::pop_due):
+    /// messages posted after this was read wait for the next round.
+    pub fn last_seq(&self) -> u64 {
+        self.seq
+    }
+
+    /// Take the next message due at `now` that was posted no later than `last_seq`:
+    /// delayed ones first (in fire order), then immediate ones. One at a time, so a
+    /// handler can still cancel or see the ones behind it, as in TB.
+    /// TB: TBMessageHandler::ProcessMessages
+    pub fn pop_due(&mut self, now: Millis, last_seq: u64) -> Option<Entry> {
+        let due = self.delayed.partition_point(|e| e.fire_at <= now);
+        if let Some(i) = self.delayed[..due].iter().position(|e| e.seq <= last_seq) {
+            return Some(self.delayed.remove(i));
+        }
+        match self.immediate.front() {
+            Some(e) if e.seq <= last_seq => self.immediate.pop_front(),
+            _ => None,
+        }
     }
 
     /// Earliest time something is due: `Some(0)` if immediate messages are queued.

@@ -232,8 +232,8 @@ impl Ui {
             for a in 0..2 {
                 // Same direction as the running scroll: add what is left of it.
                 if (ppms[a] < 0.0) == (speed[a] < 0.0) {
-                    let remaining = start[a] + FUNC.total_distance_int(speed[a]) - pos[a];
-                    let total = remaining + FUNC.total_distance_int(ppms[a]);
+                    let remaining = start[a].saturating_add(FUNC.total_distance_int(speed[a])).saturating_sub(pos[a]);
+                    let total = remaining.saturating_add(FUNC.total_distance_int(ppms[a]));
                     ppms[a] = FUNC.speed_from_distance(total as f32);
                 }
             }
@@ -400,8 +400,8 @@ impl Ui {
         let elapsed = self.now.saturating_sub(start) as f32;
         let e = [elapsed.min(duration[0]), elapsed.min(duration[1])];
         let want = Point::new(
-            FUNC.distance_at_time_int(speed[0], e[0]) + start_scroll.x,
-            FUNC.distance_at_time_int(speed[1], e[1]) + start_scroll.y,
+            FUNC.distance_at_time_int(speed[0], e[0]).saturating_add(start_scroll.x),
+            FUNC.distance_at_time_int(speed[1], e[1]).saturating_add(start_scroll.y),
         );
         let d = want - self.scroller_target_scroll(id);
         if d != Point::ZERO {

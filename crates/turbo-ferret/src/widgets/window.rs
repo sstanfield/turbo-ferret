@@ -353,6 +353,12 @@ impl Ui {
 
     /// TB: TBWindow::ResizeToFitContent
     pub fn resize_to_fit_content(&mut self, win: WidgetId, fit: ResizeFit) {
+        if self.is_busy(win) {
+            // From one of the window's own hooks (TB's "ResizeToFitContent from
+            // OnEvent"): when it returns, so the window can be measured.
+            self.when_free(win, move |ui| ui.resize_to_fit_content(win, fit));
+            return;
+        }
         let r = self.fit_content_rect(win, fit);
         self.set_rect(win, r);
     }

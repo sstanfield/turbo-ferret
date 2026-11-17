@@ -55,9 +55,15 @@ impl Ui {
         let mut cur = Some(target);
         let mut guard = 0;
         while let Some(c) = cur {
+            // A destination that is gone already (a stale id) ends the bubbling:
+            // nobody handled the event.
+            if !self.tree.is_live(c) {
+                return false;
+            }
             if call_hook(self, c, |w, cx| w.on_event(cx, &ev)) == Some(true) {
                 return true;
             }
+            // Removed by its own handler: handled.
             if !self.tree.is_live(c) {
                 return true;
             }
