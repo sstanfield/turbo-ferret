@@ -53,7 +53,8 @@ mod renderer;
 pub use clipboard::MiniquadClipboard;
 
 pub use input::{
-    ClickCounter, InputAdapter, SHORTCUT_MODIFIER, WheelConverter, key_char, modifiers, shortcut_for, special_key,
+    ClickCounter, InputAdapter, KeyQuirks, SHORTCUT_MODIFIER, WheelConverter, key_char, modifiers, shortcut_for,
+    special_key,
 };
 pub use renderer::{FrameStats, MAX_QUADS, MiniquadRenderer};
 

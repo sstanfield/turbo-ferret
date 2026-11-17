@@ -94,6 +94,22 @@ pub fn modifiers(m: KeyMods) -> Modifiers {
     r
 }
 
+/// The bit of a modifier key in `InputAdapter::held`, and the bits of both keys of
+/// its modifier.
+fn modifier_bits(key: KeyCode) -> (u8, u8) {
+    match key {
+        KeyCode::LeftShift => (0x01, 0x03),
+        KeyCode::RightShift => (0x02, 0x03),
+        KeyCode::LeftControl => (0x04, 0x0C),
+        KeyCode::RightControl => (0x08, 0x0C),
+        KeyCode::LeftAlt => (0x10, 0x30),
+        KeyCode::RightAlt => (0x20, 0x30),
+        KeyCode::LeftSuper => (0x40, 0xC0),
+        KeyCode::RightSuper => (0x80, 0xC0),
+        _ => (0, 0),
+    }
+}
+
 fn modifier_of(key: KeyCode) -> Option<Modifiers> {
     match key {
         KeyCode::LeftShift | KeyCode::RightShift => Some(Modifiers::SHIFT),
@@ -328,6 +344,41 @@ pub struct InputAdapter {
     /// Character keys delivered through the key events (Ctrl/Cmd chords): their key-up
     /// is delivered even if the modifier is released first.
     chord_keys: Vec<(KeyCode, char)>,
+    /// The modifier keys that are down, one bit each (see `modifier_bit`): a
+    /// modifier stays on while either of its two keys is held.
+    held: u8,
+    quirks: KeyQuirks,
+}
+
+/// How a platform's key events differ, as miniquad 0.4 delivers them.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct KeyQuirks {
+    /// Send the key-ups of chord keys when the chord's modifier is released. On
+    /// macOS no key-up arrives for a key released while Cmd is held.
+    pub chords_end_with_modifier: bool,
+    /// Characters typed with Alt alone are text (Option on macOS). On X11 Alt+F
+    /// also arrives as the character `f`, which must not be typed.
+    pub alt_types_text: bool,
+    /// `char_event` reports the modifiers that are held. The web backend passes
+    /// none there, so the ones seen in key events are kept.
+    pub char_events_carry_modifiers: bool,
+}
+
+impl KeyQuirks {
+    /// The quirks of the platform this is compiled for.
+    pub const fn for_platform() -> KeyQuirks {
+        KeyQuirks {
+            chords_end_with_modifier: cfg!(target_os = "macos"),
+            alt_types_text: cfg!(not(target_os = "linux")),
+            char_events_carry_modifiers: cfg!(not(target_arch = "wasm32")),
+        }
+    }
+}
+
+impl Default for KeyQuirks {
+    fn default() -> Self {
+        KeyQuirks::for_platform()
+    }
 }
 
 impl Default for InputAdapter {
@@ -354,7 +405,15 @@ impl InputAdapter {
             shortcut_mod: SHORTCUT_MODIFIER,
             touches: TouchIds::default(),
             chord_keys: Vec::new(),
+            held: 0,
+            quirks: KeyQuirks::for_platform(),
         }
+    }
+
+    /// Override the platform's key quirks (they default to
+    /// [`KeyQuirks::for_platform`]).
+    pub fn set_key_quirks(&mut self, quirks: KeyQuirks) {
+        self.quirks = quirks;
     }
 
     /// The modifiers held, as last seen in a key or char event (miniquad's mouse
@@ -432,6 +491,10 @@ impl InputAdapter {
         ui.wheel(self.pointer, steps, self.mods)
     }
 
+    /// Shortcut letters come from the key code, which miniquad takes from the key's
+    /// position on Windows, macOS and the web: on a QWERTZ keyboard the key labelled
+    /// Z is `KeyCode::Y`, so Ctrl+Z there is `redo`. (TB's GLFW port did the same.)
+    ///
     /// Special keys (arrows, Enter, F1 ...) go to `ui.key` with `SpecialKey`; character
     /// keys only when Ctrl or Cmd is held (no `char_event` delivers those), with the
     /// key's ASCII character. Either may become a shortcut first. Menu opens the
@@ -447,8 +510,22 @@ impl InputAdapter {
     fn key_event(&mut self, ui: &mut Ui, key: KeyCode, mods: KeyMods, down: bool) -> bool {
         self.mods = modifiers(mods);
         if let Some(m) = modifier_of(key) {
-            // Platforms differ on whether a modifier's own event includes it.
-            self.mods.set(m, down);
+            // Platforms differ on whether a modifier's own event includes it, so
+            // track the keys: the modifier is on while either of its keys is down.
+            let (bit, both) = modifier_bits(key);
+            if down {
+                self.held |= bit;
+            } else {
+                self.held &= !bit;
+            }
+            self.mods.set(m, self.held & both != 0);
+            if !down && self.quirks.chords_end_with_modifier && !is_command_chord(self.mods) {
+                // The chord is over: release its keys now, since their own key-ups
+                // may never come.
+                for (_, ch) in core::mem::take(&mut self.chord_keys) {
+                    ui.key(Some(ch), SpecialKey::None, self.mods, false);
+                }
+            }
             return false;
         }
         if key == KeyCode::Menu {
@@ -458,19 +535,20 @@ impl InputAdapter {
             return ui.invoke_event(ev);
         }
         let special = special_key(key);
+        let mods = self.mods;
         if special != SpecialKey::None {
-            return self.invoke_key(ui, None, special, down);
+            return self.invoke_key(ui, None, special, mods, down, true);
         }
         if down {
-            let Some(ch) = key_char(key).filter(|_| is_command_chord(self.mods)) else { return false };
+            let Some(ch) = key_char(key).filter(|_| is_command_chord(mods)) else { return false };
             if !self.chord_keys.iter().any(|&(k, _)| k == key) {
                 self.chord_keys.push((key, ch));
             }
-            self.invoke_key(ui, Some(ch), SpecialKey::None, true)
+            self.invoke_key(ui, Some(ch), SpecialKey::None, mods, true, true)
         } else {
             let Some(i) = self.chord_keys.iter().position(|&(k, _)| k == key) else { return false };
             let (_, ch) = self.chord_keys.swap_remove(i);
-            self.invoke_key(ui, Some(ch), SpecialKey::None, false)
+            self.invoke_key(ui, Some(ch), SpecialKey::None, mods, false, true)
         }
     }
 
@@ -478,25 +556,49 @@ impl InputAdapter {
     /// does. Control and private-use characters, and characters typed with Ctrl or
     /// Cmd (but not Alt), are dropped: the key events deliver those keys, so nothing
     /// arrives twice. TB: char_callback
+    ///
+    /// A character typed with Ctrl and Alt together is text, not a command: that is
+    /// AltGr on Windows (`@`, `€`, `{` on many layouts). It is delivered without
+    /// those two modifiers, and never as a shortcut.
     pub fn char_event(&mut self, ui: &mut Ui, ch: char, mods: KeyMods, _repeat: bool) -> bool {
-        self.mods = modifiers(mods);
-        if is_unprintable(ch) || is_command_chord(self.mods) {
+        // miniquad's web backend passes no modifiers here: keep the ones the key
+        // events gave.
+        if self.quirks.char_events_carry_modifiers {
+            self.mods = modifiers(mods);
+        }
+        let mut mods = self.mods;
+        if is_unprintable(ch) || is_command_chord(mods) {
             return false;
         }
-        let handled = self.invoke_key(ui, Some(ch), SpecialKey::None, true);
-        self.invoke_key(ui, Some(ch), SpecialKey::None, false) || handled
+        let alt_gr = Modifiers::CTRL | Modifiers::ALT;
+        if mods.contains(alt_gr) {
+            mods = mods.without(alt_gr);
+        } else if mods.contains(Modifiers::ALT) && !self.quirks.alt_types_text {
+            return false;
+        }
+        // A typed character is never a shortcut: chords come through the key events.
+        let handled = self.invoke_key(ui, Some(ch), SpecialKey::None, mods, true, false);
+        self.invoke_key(ui, Some(ch), SpecialKey::None, mods, false, false) || handled
     }
 
-    /// Shortcut first (on press), then the key. TB: InvokeKey
-    fn invoke_key(&mut self, ui: &mut Ui, ch: Option<char>, special: SpecialKey, down: bool) -> bool {
-        if down {
-            if let Some(id) = shortcut_for(ch, special, self.mods, self.shortcut_mod) {
-                if ui.shortcut(id, self.mods) {
+    /// Shortcut first (on press, if `shortcuts`), then the key. TB: InvokeKey
+    fn invoke_key(
+        &mut self,
+        ui: &mut Ui,
+        ch: Option<char>,
+        special: SpecialKey,
+        mods: Modifiers,
+        down: bool,
+        shortcuts: bool,
+    ) -> bool {
+        if down && shortcuts {
+            if let Some(id) = shortcut_for(ch, special, mods, self.shortcut_mod) {
+                if ui.shortcut(id, mods) {
                     return true;
                 }
             }
         }
-        ui.key(ch, special, self.mods, down)
+        ui.key(ch, special, mods, down)
     }
 
     /// Touches, with the first finger as touch 0 (the pointer path, with click
@@ -546,6 +648,7 @@ impl InputAdapter {
     /// `window_minimized_event` when a desktop window loses focus; call it from there.
     pub fn focus_lost(&mut self, ui: &mut Ui) {
         self.mods = Modifiers::NONE;
+        self.held = 0;
         self.chord_keys.clear();
         self.clicks.reset();
         if ui.captured().is_some() {
