@@ -1,4 +1,4 @@
-//! `update()`: animations, long click, messages, widget states, skin updates, layout
+//! `update()`: animations, kinetic scrolling, long click, messages, widget states, skin updates, layout
 //! and `on_process`, in that order (section 5).
 //!
 //! TB: TBAnimationManager::Update, TBMessageHandler::ProcessMessages,
@@ -19,6 +19,7 @@ impl Ui {
     pub fn update(&mut self) {
         self.top(|ui| {
             ui.update_animations();
+            ui.update_scrollers();
             ui.update_long_click();
             ui.deliver_messages();
             ui.process_states();
@@ -28,13 +29,13 @@ impl Ui {
         });
     }
 
-    /// When the host should call `update` next: `Some(now)` while animations run or
-    /// immediate messages are queued, else the earliest delayed message or long-click
+    /// When the host should call `update` next: `Some(now)` while animations or
+    /// scrolls run or immediate messages are queued, else the earliest delayed message or long-click
     /// deadline, else `None` (wait for input). Replaces TBSystem::RescheduleTimer.
     pub fn next_wake_time(&self) -> Option<Millis> {
         let mut t: Option<Millis> = None;
         let mut min = |x: Millis| t = Some(t.map_or(x, |y| y.min(x)));
-        if self.has_running_animations() {
+        if self.has_running_animations() || self.has_running_scrollers() {
             min(self.now);
         }
         if let Some(d) = self.msgs.next_due() {

@@ -66,6 +66,49 @@ impl Skin {
         }
     }
 
+    /// Paint fade-out bitmaps over the edges of `dst` that have scrolled-away content
+    /// beyond them (`left`, `top`, `right`, `bottom` are the hidden distances).
+    /// TB: tb_skin_util.cpp DrawEdgeFadeout
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn paint_edge_fadeout(
+        &self,
+        p: &mut Painter,
+        dst: Rect,
+        skin_x: TbId,
+        skin_y: TbId,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    ) {
+        let parts = |id: TbId| {
+            let frag = self.element(id)?.bitmap?;
+            Some((frag, self.bitmap(frag)?))
+        };
+        if let Some((frag, bmp)) = parts(skin_x) {
+            let (bw, bh) = (frag.rect.w, frag.rect.h);
+            let whole = Rect::new(0, 0, bw, bh);
+            if left > 0 {
+                p.draw_bitmap(Rect::new(dst.x, dst.y, bw, dst.h), src(frag, whole, false, false), bmp, Color::WHITE);
+            }
+            if right > 0 {
+                let d = Rect::new(dst.right() - bw, dst.y, bw, dst.h);
+                p.draw_bitmap(d, src(frag, whole, true, false), bmp, Color::WHITE);
+            }
+        }
+        if let Some((frag, bmp)) = parts(skin_y) {
+            let (bw, bh) = (frag.rect.w, frag.rect.h);
+            let whole = Rect::new(0, 0, bw, bh);
+            if top > 0 {
+                p.draw_bitmap(Rect::new(dst.x, dst.y, dst.w, bh), src(frag, whole, false, false), bmp, Color::WHITE);
+            }
+            if bottom > 0 {
+                let d = Rect::new(dst.x, dst.bottom() - bh, dst.w, bh);
+                p.draw_bitmap(d, src(frag, whole, false, true), bmp, Color::WHITE);
+            }
+        }
+    }
+
     fn bitmap(&self, f: FragmentId) -> Option<BitmapId> {
         self.atlas.bitmap(f.page)
     }

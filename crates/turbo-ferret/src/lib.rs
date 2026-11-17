@@ -56,6 +56,6 @@ pub use res::{ParseError, RefTrees, ResNode};
 #[cfg(feature = "std")]
 pub use services::FsLoader;
 pub use services::{DecodeError, Image, ImageDecoder, LoadError, MemLoader, ResourceLoader, Services};
-pub use ui::{Config, Ctx, FocusReason, ListenerId, NodeFlags, NodeRef, Ui, UiListener};
+pub use ui::{Config, Ctx, FocusReason, ListenerId, NodeFlags, NodeRef, ScrollSnap, ScrollerFunction, Ui, UiListener};
 pub use value::{Value, ValueKind};
 pub use widget::{Align, Axis, DieAction, HitStatus, ScrollInfo, Widget, WidgetState, Z, ZRel};

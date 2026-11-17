@@ -81,6 +81,37 @@ pub fn exp(x: f32) -> f32 {
     result * f32::from_bits(((k + 127) as u32) << 23)
 }
 
+/// Natural logarithm (x > 0). Splits off the exponent, then uses the atanh series
+/// on a mantissa in [sqrt(1/2), sqrt(2)); accurate to about 1e-6 relative.
+pub fn ln(x: f32) -> f32 {
+    if x.is_nan() || x < 0.0 {
+        return f32::NAN;
+    }
+    if x == 0.0 {
+        return f32::NEG_INFINITY;
+    }
+    if x.is_infinite() {
+        return x;
+    }
+    let mut bits = x.to_bits();
+    let mut e = 0i32;
+    if bits < (1 << 23) {
+        // Subnormal: scale up by 2^23 first.
+        bits = (x * 8_388_608.0).to_bits();
+        e -= 23;
+    }
+    e += (bits >> 23) as i32 - 127;
+    let mut m = f32::from_bits((bits & 0x007f_ffff) | (127 << 23)); // [1, 2)
+    if m > core::f32::consts::SQRT_2 {
+        m *= 0.5;
+        e += 1;
+    }
+    let s = (m - 1.0) / (m + 1.0);
+    let s2 = s * s;
+    let p = ((((1.0 / 9.0) * s2 + 1.0 / 7.0) * s2 + 1.0 / 5.0) * s2 + 1.0 / 3.0) * s2 + 1.0;
+    2.0 * s * p + e as f32 * core::f32::consts::LN_2
+}
+
 /// Integer power of an f32.
 pub fn powi(mut x: f32, mut n: i32) -> f32 {
     if n < 0 {
@@ -128,6 +159,22 @@ mod tests {
             let want = (v as f64).sqrt() as f32;
             assert!(abs(s - want) <= want * 1e-6 + 1e-12, "sqrt({v}) = {s}, want {want}");
         }
+    }
+
+    #[test]
+    fn ln_accuracy() {
+        let mut x = 1e-6f32;
+        while x < 1e6 {
+            let got = ln(x);
+            let want = (x as f64).ln() as f32;
+            assert!(abs(got - want) <= abs(want) * 2e-6 + 2e-6, "ln({x}) = {got}, want {want}");
+            x *= 1.37;
+        }
+        assert_eq!(ln(1.0), 0.0);
+        assert!(ln(0.0).is_infinite());
+        assert!(ln(-1.0).is_nan());
+        let tiny = f32::from_bits(5); // subnormal
+        assert!(abs(ln(tiny) - (tiny as f64).ln() as f32) < 1e-3);
     }
 
     #[test]

@@ -214,7 +214,7 @@ impl Ui {
 
     /// TB: ScrollBy
     pub fn scroll_by(&mut self, id: WidgetId, d: Point) {
-        if let Some(info) = self.node(id).and_then(|n| n.behaviour()).and_then(|b| b.scroll_info()) {
+        if let Some(info) = self.scroll_info(id) {
             self.scroll_to(id, info.pos + d);
         }
     }
@@ -237,8 +237,9 @@ impl Ui {
         d
     }
 
+    /// Scroll position and limits of a scrollable widget. TB: GetScrollInfo
     pub fn scroll_info(&self, id: WidgetId) -> Option<crate::widget::ScrollInfo> {
-        self.node(id)?.behaviour()?.scroll_info()
+        self.tree.scroll_info(id)
     }
 
     /// Scroll ancestors so `id` is visible. TB: ScrollIntoViewRecursive

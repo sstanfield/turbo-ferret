@@ -37,6 +37,8 @@ flags! {
         const KEY_PRESSED = 2048;
         /// Children inflated into this node go to the bottom (TB: SetZInflate).
         const INFLATE_BOTTOM = 4096;
+        /// Layout invalidation stops here (see `Ui::set_layout_boundary`).
+        const LAYOUT_BOUNDARY = 8192;
     }
 }
 
@@ -65,6 +67,10 @@ pub struct Node {
     pub(crate) type_name: &'static str,
     /// `Widget::extra_padding` as of the last put-back (used while the behaviour is out).
     pub(crate) extra_pad: crate::geom::Edges,
+    /// `Widget::axis` and `Widget::align` as of the last put-back, for skin
+    /// conditions that ask while the behaviour is out.
+    pub(crate) axis: crate::widget::Axis,
+    pub(crate) align: Option<crate::widget::Align>,
     /// User slot (TB's `data`).
     pub data: Value,
     /// `None` only while one of its hooks runs (take-out).
@@ -90,6 +96,8 @@ impl Node {
             measure_cache: None,
             type_name: b.type_name(),
             extra_pad: crate::geom::Edges::ZERO,
+            axis: b.axis(),
+            align: b.align(),
             data: Value::Null,
             behaviour: Some(b),
         }

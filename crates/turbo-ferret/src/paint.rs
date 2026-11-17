@@ -91,6 +91,24 @@ impl<'a, 'r> PaintCtx<'a, 'r> {
         }
     }
 
+    /// Paint the fade-out skins over the edges of `rect` where content is scrolled
+    /// out of view: `skin_x` on the left and right edges, `skin_y` on the top and
+    /// bottom ones, each only if its hidden distance is above zero.
+    /// TB: DrawEdgeFadeout
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_edge_fadeout(
+        &mut self,
+        rect: Rect,
+        skin_x: TbId,
+        skin_y: TbId,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    ) {
+        self.view.skin.paint_edge_fadeout(self.painter, rect, skin_x, skin_y, left, top, right, bottom);
+    }
+
     pub fn fill_rect(&mut self, rect: Rect, color: Color) {
         self.painter.fill_rect(rect, color);
     }

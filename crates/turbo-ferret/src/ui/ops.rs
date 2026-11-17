@@ -181,6 +181,18 @@ impl Ui {
             }
         }
 
+        // A pan in progress ends with its captured widget, and scrolls of removed
+        // widgets stop.
+        if let Some(cap) = self.input.captured.filter(|&c| self.tree.is_ancestor_of(id, c)) {
+            if let Some(s) = self.find_started_scroller(cap) {
+                self.stop_scroller(s);
+            }
+        }
+        if !self.active_scrollers.is_empty() {
+            let tree = &self.tree;
+            self.active_scrollers.retain(|&w| !tree.is_ancestor_of(id, w));
+        }
+
         // 2. Detach.
         if let Some(p) = self.tree.parent(id) {
             if let Some(pn) = self.tree.live_mut(p) {
@@ -280,6 +292,7 @@ impl Ui {
             self.tree.collect_subtree(id, &mut sub);
             for &w in sub.iter().rev() {
                 self.tree.layout_params.remove(w);
+                self.tree.scrollers.remove(w);
                 self.tree.connections.remove(w);
                 self.tree.widget_listeners.remove(w);
                 self.tree.last_focus.remove(w);
@@ -298,6 +311,7 @@ impl Ui {
     // ------------------------------------------------------------------
 
     /// Clear the measure cache of `id` and its ancestors and mark them for arrange.
+    /// Stops above a layout boundary (see `set_layout_boundary`).
     /// TB: InvalidateLayout(INVALIDATE_LAYOUT_RECURSIVE)
     pub fn invalidate_layout(&mut self, id: WidgetId) {
         let mut cur = Some(id);
@@ -305,12 +319,28 @@ impl Ui {
             let Some(n) = self.tree.live_mut(c) else { break };
             n.measure_cache = None;
             n.flags.insert(NodeFlags::NEEDS_ARRANGE);
-            if n.visibility == Visibility::Gone {
+            if n.visibility == Visibility::Gone || n.flags.contains(NodeFlags::LAYOUT_BOUNDARY) {
                 break;
             }
             cur = n.parent;
         }
         self.repaint = true;
+    }
+
+    /// A layout boundary's size does not depend on its content, so invalidating the
+    /// layout below it re-arranges it but not its ancestors.
+    /// TB: TBScrollContainer::InvalidateLayout (no recursion to the parents)
+    pub fn set_layout_boundary(&mut self, id: WidgetId, on: bool) {
+        let Some(n) = self.tree.live_mut(id) else { return };
+        if n.flags.contains(NodeFlags::LAYOUT_BOUNDARY) == on {
+            return;
+        }
+        // Ancestors have to hear about the change either way.
+        n.flags.remove(NodeFlags::LAYOUT_BOUNDARY);
+        self.invalidate_layout(id);
+        if let Some(n) = self.tree.live_mut(id) {
+            n.flags.set(NodeFlags::LAYOUT_BOUNDARY, on);
+        }
     }
 
     /// Preferred size under constraints, cached per node (M-04, H-18).

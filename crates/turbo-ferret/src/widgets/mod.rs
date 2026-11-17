@@ -4,14 +4,20 @@ pub mod button;
 pub mod layout;
 pub mod misc;
 pub mod scroll;
+pub mod scroll_container;
+pub mod tab_container;
 pub mod text;
+pub mod toggle;
 pub mod window;
 
 pub use button::{Button, ClickLabel};
 pub use layout::Layout;
 pub use misc::{CheckBox, Dimmer, Mover, ProgressSpinner, RadioButton, Resizer, Separator, SkinImage};
 pub use scroll::{ScrollBar, Slider};
+pub use scroll_container::{ScrollBarVisibility, ScrollContainer, ScrollContainerRoot, ScrollMode};
+pub use tab_container::TabContainer;
 pub use text::{TextAlign, TextField};
+pub use toggle::{Section, SectionHeader, Toggle, ToggleContainer};
 pub use window::{ResizeFit, Window, WindowSettings};
 
 use crate::reader::Factory;
@@ -82,4 +88,19 @@ pub(crate) fn register_builtins(ui: &mut Ui) {
     register_both(ui, "TBMover", "Mover", Factory::of::<Mover>("Mover"));
     register_both(ui, "TBResizer", "Resizer", Factory::of::<Resizer>("Resizer"));
     register_both(ui, "TBDimmer", "Dimmer", Factory::of::<Dimmer>("Dimmer"));
+    register_both(ui, "TBScrollContainer", "ScrollContainer", Factory::of::<ScrollContainer>("ScrollContainer"));
+    register_both(ui, "TBTabContainer", "TabContainer", Factory::of::<TabContainer>("TabContainer"));
+    register_both(
+        ui,
+        "TBToggleContainer",
+        "ToggleContainer",
+        Factory::of::<ToggleContainer>("ToggleContainer").sync(ValueKind::Int),
+    );
+    register_both(
+        ui,
+        "TBSectionHeader",
+        "SectionHeader",
+        Factory::of::<SectionHeader>("SectionHeader").sync(ValueKind::Int),
+    );
+    register_both(ui, "TBSection", "Section", Factory::of::<Section>("Section").sync(ValueKind::Int));
 }

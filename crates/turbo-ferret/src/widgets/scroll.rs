@@ -39,6 +39,16 @@ impl ScrollBar {
 
     /// TB: TBScrollBar::SetLimits
     pub fn set_limits(&mut self, cx: &mut Ctx, min: f64, max: f64, visible: f64) {
+        self.set_limits_impl(cx, min, max, visible, true);
+    }
+
+    /// `set_limits` without the `Changed` event, for an owner that tracks the value
+    /// itself (its own hook is running, so the event could not reach it anyway).
+    pub fn set_limits_quiet(&mut self, cx: &mut Ctx, min: f64, max: f64, visible: f64) {
+        self.set_limits_impl(cx, min, max, visible, false);
+    }
+
+    fn set_limits_impl(&mut self, cx: &mut Ctx, min: f64, max: f64, visible: f64, emit: bool) {
         let max = max.max(min);
         let visible = visible.max(0.0);
         if (min, max, visible) == (self.min, self.max, self.visible) {
@@ -48,19 +58,42 @@ impl ScrollBar {
         self.max = max;
         self.visible = visible;
         let v = self.value;
-        self.set_value_f(cx, v);
+        self.set_value_impl(cx, v, emit);
         self.update_handle(cx);
     }
 
     /// TB: TBScrollBar::SetValueDouble
     pub fn set_value_f(&mut self, cx: &mut Ctx, v: f64) {
+        self.set_value_impl(cx, v, true);
+    }
+
+    /// `set_value_f` without the `Changed` event (see `set_limits_quiet`).
+    pub fn set_value_quiet(&mut self, cx: &mut Ctx, v: f64) {
+        self.set_value_impl(cx, v, false);
+    }
+
+    fn set_value_impl(&mut self, cx: &mut Ctx, v: f64, emit: bool) {
         let v = v.clamp(self.min, self.max);
         if v == self.value {
             return;
         }
         self.value = v;
         self.update_handle(cx);
-        cx.emit_changed(Value::Float(v as f32));
+        if emit {
+            cx.emit_changed(Value::Float(v as f32));
+        } else {
+            cx.invalidate();
+        }
+    }
+
+    /// TB: TBScrollBar::CanScrollNegative
+    pub fn can_scroll_negative(&self) -> bool {
+        self.value > self.min
+    }
+
+    /// TB: TBScrollBar::CanScrollPositive
+    pub fn can_scroll_positive(&self) -> bool {
+        self.value < self.max
     }
 
     pub fn value_f(&self) -> f64 {

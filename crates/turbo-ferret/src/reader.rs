@@ -148,6 +148,19 @@ impl Ui {
         self.inflate_doc(parent, node, "<node>")
     }
 
+    /// Apply `node`'s properties to an existing widget: its own `on_inflate`, then the
+    /// generic ones (id, skin, gravity, `lp` ...) and the font. For widgets with
+    /// internal parts that resources can configure, like a tab container's layouts.
+    /// TB: calling OnInflate on an existing widget
+    pub fn inflate_properties(&mut self, w: WidgetId, node: &ResNode) {
+        let doc = Doc { root: node, file: "<node>" };
+        self.top(|ui| {
+            call_hook(ui, w, |b, cx| b.on_inflate(cx, node));
+            ui.apply_generic(&doc, w, node, ValueKind::Null);
+            ui.apply_font(&doc, w, node);
+        });
+    }
+
     fn inflate_doc(&mut self, parent: WidgetId, node: &ResNode, file: &str) -> Result<Vec<WidgetId>, InflateError> {
         let doc = Doc { root: node, file };
         self.top(|ui| {

@@ -110,7 +110,7 @@ impl Ui {
     /// TB: GetWidgetAt(x, y, include_children = true)
     pub fn widget_at(&self, root: WidgetId, p: Point) -> Option<WidgetId> {
         let n = self.node(root)?;
-        let p = p - n.behaviour().map(|b| b.child_translation()).unwrap_or_default();
+        let p = p - self.tree.child_translation(root);
         let mut last = None;
         for c in n.child_refs() {
             let cp = p - c.rect().origin();
@@ -141,10 +141,7 @@ impl Ui {
         let mut cur = id;
         while let Some(n) = self.node(cur) {
             let Some(parent) = n.parent() else { break };
-            p -= n.rect().origin();
-            if let Some(pb) = self.node(parent).and_then(|pn| pn.behaviour()) {
-                p -= pb.child_translation();
-            }
+            p -= n.rect().origin() + self.tree.child_translation(parent);
             cur = parent;
         }
         p
@@ -155,10 +152,7 @@ impl Ui {
         let mut cur = id;
         while let Some(n) = self.node(cur) {
             let Some(parent) = n.parent() else { break };
-            p += n.rect().origin();
-            if let Some(pb) = self.node(parent).and_then(|pn| pn.behaviour()) {
-                p += pb.child_translation();
-            }
+            p += n.rect().origin() + self.tree.child_translation(parent);
             cur = parent;
         }
         p
@@ -187,7 +181,15 @@ impl Ui {
             return;
         }
         let old = self.input.captured;
-        if old.is_some() {
+        if let Some(o) = old {
+            // The pan ends: a started scroller keeps scrolling if it was a flick.
+            if let Some(s) = self.find_started_scroller(o) {
+                if self.input.panning {
+                    self.scroller_pan_released(s);
+                } else {
+                    self.stop_scroller(s);
+                }
+            }
             self.input.panning = false;
             self.input.long_click = None;
             self.repaint = true;
@@ -316,7 +318,7 @@ impl Ui {
         self.handle_panning(lp);
     }
 
-    /// TB: HandlePanningOnMove (without the kinetic scroller, which comes with M5).
+    /// TB: HandlePanningOnMove
     fn handle_panning(&mut self, lp: Point) {
         let Some(cap) = self.input.captured else { return };
         let d = self.input.down_pos - lp;
@@ -337,16 +339,17 @@ impl Ui {
                 comp.y = if d.y < 0 { extra } else { -extra };
             }
         }
-        let Some(target) = self.find_scrollable(cap, d.x != 0, d.y != 0) else { return };
-        let delta = d + comp;
-        let before = self.scroll_info(target).map(|i| i.pos);
-        let left = self.scroll_by_recursive(target, delta);
-        let after = self.scroll_info(target).map(|i| i.pos);
-        if left != delta || before != after {
+        // Feed the started scroller, or the one of the nearest scrollable widget.
+        let Some(target) = self.ready_scroller(cap, d.x != 0, d.y != 0) else { return };
+        let old = self.scroll_root_translation(cap);
+        if self.scroller_pan(target, d + comp) {
+            // Something scrolled, so this is a pan now.
             self.input.panning = true;
             self.input.cancel_click = true;
-            // The content moved under the pointer: re-anchor the down position.
-            self.input.down_pos = lp;
+            // If the captured widget itself scrolled, move the down position with
+            // its content so the difference does not add up in the following pans.
+            let new = self.scroll_root_translation(cap);
+            self.input.down_pos += new - old + comp;
         }
     }
 
@@ -358,9 +361,16 @@ impl Ui {
             .find(|&c| self.scroll_info(c).is_some_and(|i| (x && i.can_scroll_x()) || (y && i.can_scroll_y())))
     }
 
-    /// Stop kinetic scrolling above `id`; true if one was running. (Scrollers: M5.)
-    fn stop_scrollers_above(&mut self, _id: WidgetId) -> bool {
-        false
+    /// Stop the started scroller of `id` or an ancestor; true if there was one (the
+    /// touch that stops a scroll must not become a click).
+    fn stop_scrollers_above(&mut self, id: WidgetId) -> bool {
+        match self.find_started_scroller(id) {
+            Some(s) => {
+                self.stop_scroller(s);
+                true
+            }
+            None => false,
+        }
     }
 
     /// Wheel at `p` (root coordinates). Positive `delta.y` scrolls down.

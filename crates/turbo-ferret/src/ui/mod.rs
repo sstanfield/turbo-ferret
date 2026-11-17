@@ -10,6 +10,7 @@ mod listen;
 mod node;
 mod ops;
 mod process;
+mod scroller;
 mod text;
 pub(crate) mod tree;
 mod value_group;
@@ -27,6 +28,7 @@ pub use focus::FocusReason;
 pub use input::InputState;
 pub use listen::{ListenerId, UiListener};
 pub use node::{Node, NodeFlags, NodeRef};
+pub use scroller::{ScrollSnap, ScrollerFunction};
 pub use view::View;
 
 use crate::arena::WidgetId;
@@ -109,6 +111,8 @@ pub struct Ui {
     pub(crate) default_font: FontDesc,
     /// Reusable buffer for snapshot walks.
     pub(crate) scratch: Vec<WidgetId>,
+    /// Widgets whose kinetic or smooth scroll is running (stepped by `update`).
+    pub(crate) active_scrollers: Vec<WidgetId>,
     pub(crate) registry: Registry,
     pub(crate) lang: Language,
     pub(crate) refs: RefTrees,
@@ -139,6 +143,7 @@ impl Ui {
             viewport: Size::ZERO,
             default_font: FontDesc::default(),
             scratch: Vec::new(),
+            active_scrollers: Vec::new(),
             registry: Registry::default(),
             lang: Language::default(),
             refs: RefTrees::default(),
@@ -218,6 +223,17 @@ impl Ui {
 
     pub(crate) fn log(&self, level: Level, args: fmt::Arguments<'_>) {
         self.services.log(level, args);
+    }
+
+    pub(crate) fn warn(&self, args: fmt::Arguments<'_>) {
+        self.services.log(Level::Warn, args);
+    }
+
+    /// Re-resolve skin elements whose conditions may have changed (at the next
+    /// `update`). TB: InvalidateSkinStates
+    pub fn invalidate_skin_states(&mut self) {
+        self.skin_dirty = true;
+        self.repaint = true;
     }
 
     pub(crate) fn warn_busy(&self, id: WidgetId) {

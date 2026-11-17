@@ -1,14 +1,19 @@
 //! `Layout`: stacks children along an axis. TB: tb_layout.cpp (TBLayout)
 
+use crate::arena::WidgetId;
 use crate::event::{Event, EventKind};
 use crate::geom::{Point, Rect};
+use crate::id::TbId;
 use crate::layout::size::{Gravity, PreferredSize, SizeConstraints};
 use crate::layout::stack::{
     self, LayoutDistribution, LayoutDistributionPosition, LayoutOverflow, LayoutPosition, LayoutSize, StackSettings,
 };
+use crate::paint::PaintCtx;
 use crate::res::ResNode;
 use crate::ui::Ctx;
 use crate::widget::{Axis, ScrollInfo, Widget};
+
+use super::Button;
 
 #[derive(Clone, Debug)]
 pub struct Layout {
@@ -22,6 +27,8 @@ pub struct Layout {
     pub distribution_position: LayoutDistributionPosition,
     pub reverse: bool,
     pub paint_overflow_fadeout: bool,
+    /// The tab layout of a `TabContainer` (TB: TBTabLayout, a TBLayout subclass).
+    tabs: bool,
     overflow_amount: i32,
     overflow_scroll: i32,
 }
@@ -38,6 +45,7 @@ impl Default for Layout {
             distribution_position: LayoutDistributionPosition::Center,
             reverse: false,
             paint_overflow_fadeout: true,
+            tabs: false,
             overflow_amount: 0,
             overflow_scroll: 0,
         }
@@ -47,6 +55,18 @@ impl Default for Layout {
 impl Layout {
     pub fn new(axis: Axis) -> Layout {
         Layout { axis, ..Default::default() }
+    }
+
+    /// The layout that holds a tab container's tab buttons. TB: TBTabLayout
+    pub(crate) fn tab_layout() -> Layout {
+        Layout { tabs: true, ..Default::default() }
+    }
+
+    /// Change a setting and re-layout.
+    pub fn configure(&mut self, cx: &mut Ctx, f: impl FnOnce(&mut Layout)) {
+        f(self);
+        let me = cx.this();
+        cx.invalidate_layout(me);
     }
 
     pub fn overflow(&self) -> i32 {
@@ -114,7 +134,28 @@ impl Widget for Layout {
 
     fn measure_content(&mut self, cx: &mut Ctx, sc: SizeConstraints) -> PreferredSize {
         let s = self.settings(cx);
-        stack::measure(cx, &s, sc)
+        let mut ps = stack::measure(cx, &s, sc);
+        if self.tabs {
+            // The number of tabs must not grow the parents: only the content should
+            // do that, and the tabs scroll anyway.
+            // TB: TBTabLayout::OnCalculatePreferredContentSize
+            match self.axis {
+                Axis::X => ps.min.w = ps.min.w.min(1),
+                Axis::Y => ps.min.h = ps.min.h.min(1),
+            }
+        }
+        ps
+    }
+
+    /// Buttons added to a tab layout become tabs. TB: TBTabLayout::OnChildAdded
+    fn on_child_added(&mut self, cx: &mut Ctx, child: WidgetId) {
+        if !self.tabs {
+            return;
+        }
+        if cx.with_widget::<Button, _>(child, |b, cx| b.set_squeezable(cx, true)).is_some() {
+            cx.set_skin(child, crate::tbid!("TBTabContainer.tab"));
+            cx.set_id(child, crate::tbid!("tab"));
+        }
     }
 
     /// TB: TBLayout::OnResized / OnProcess (ValidateLayout)
@@ -170,6 +211,23 @@ impl Widget for Layout {
             Axis::X => padding.expand(start, FLUFF, end, FLUFF),
             Axis::Y => padding.expand(FLUFF, start, FLUFF, end),
         })
+    }
+
+    /// Fade out the edges that have scrolled-away children beyond them.
+    /// TB: TBLayout::OnPaintChildren (the DrawEdgeFadeout part)
+    fn paint_after_children(&self, p: &mut PaintCtx) {
+        if self.overflow_amount == 0 || !self.paint_overflow_fadeout {
+            return;
+        }
+        let (before, after) = (self.overflow_scroll, self.overflow_amount - self.overflow_scroll);
+        let r = p.padding_rect();
+        if r.is_empty() {
+            return;
+        }
+        match self.axis {
+            Axis::X => p.draw_edge_fadeout(r, crate::tbid!("TBLayout.fadeout_x"), TbId::NONE, before, 0, after, 0),
+            Axis::Y => p.draw_edge_fadeout(r, TbId::NONE, crate::tbid!("TBLayout.fadeout_y"), 0, before, 0, after),
+        }
     }
 
     fn scroll_info(&self) -> Option<ScrollInfo> {

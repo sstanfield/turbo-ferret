@@ -6,16 +6,38 @@
 use alloc::vec::Vec;
 
 use crate::arena::{Arena, SideTable, WidgetId};
+use crate::geom::Point;
 use crate::id::TbId;
 use crate::layout::size::LayoutParams;
+use crate::widget::ScrollInfo;
 
 use super::listen::ListenerId;
 use super::node::{Node, NodeFlags, NodeRef};
+use super::scroller::Scroller;
+
+/// What scroll queries answer about a node while its behaviour is taken out.
+#[derive(Copy, Clone, Default)]
+pub(crate) struct BusyScroll {
+    pub info: Option<ScrollInfo>,
+    pub translation: Point,
+    pub root: Option<WidgetId>,
+}
+
+impl BusyScroll {
+    pub fn of(b: &dyn crate::widget::Widget) -> Option<BusyScroll> {
+        let s = BusyScroll { info: b.scroll_info(), translation: b.child_translation(), root: b.scroll_root() };
+        (s.info.is_some() || s.translation != Point::ZERO || s.root.is_some()).then_some(s)
+    }
+}
 
 pub(crate) struct Tree {
     pub nodes: Arena<Node>,
     pub root: WidgetId,
     pub layout_params: SideTable<LayoutParams>,
+    pub scrollers: SideTable<Scroller>,
+    /// Scroll info and child translation of nodes whose hook is running (their
+    /// behaviour is taken out, so it cannot be asked). Filled by `call_hook`.
+    pub busy_scroll: SideTable<BusyScroll>,
     pub connections: SideTable<TbId>,
     pub widget_listeners: SideTable<Vec<ListenerId>>,
     pub last_focus: SideTable<WidgetId>,
@@ -29,6 +51,8 @@ impl Tree {
             nodes,
             root,
             layout_params: SideTable::new(),
+            scrollers: SideTable::new(),
+            busy_scroll: SideTable::new(),
             connections: SideTable::new(),
             widget_listeners: SideTable::new(),
             last_focus: SideTable::new(),
@@ -54,6 +78,37 @@ impl Tree {
 
     pub fn parent(&self, id: WidgetId) -> Option<WidgetId> {
         self.live(id)?.parent
+    }
+
+    /// Scroll position and limits of a scrollable node. While the node's own hook
+    /// runs, this is the value from when the hook started.
+    pub fn scroll_info(&self, id: WidgetId) -> Option<ScrollInfo> {
+        match &self.live(id)?.behaviour {
+            Some(b) => b.scroll_info(),
+            None => self.busy_scroll.get(id).and_then(|c| c.info),
+        }
+    }
+
+    /// The node whose child translation moves when `id` scrolls. TB: GetScrollRoot
+    pub fn scroll_root(&self, id: WidgetId) -> WidgetId {
+        let root = match self.live(id).map(|n| &n.behaviour) {
+            Some(Some(b)) => b.scroll_root(),
+            Some(None) => self.busy_scroll.get(id).and_then(|c| c.root),
+            None => None,
+        };
+        root.unwrap_or(id)
+    }
+
+    /// Offset applied to the node's children (see `scroll_info` about busy nodes).
+    /// TB: GetChildTranslation
+    pub fn child_translation(&self, id: WidgetId) -> Point {
+        match self.live(id) {
+            Some(n) => match &n.behaviour {
+                Some(b) => b.child_translation(),
+                None => self.busy_scroll.get(id).map(|c| c.translation).unwrap_or_default(),
+            },
+            None => Point::ZERO,
+        }
     }
 
     pub fn ancestors_or_self(&self, id: WidgetId) -> impl Iterator<Item = &Node> {

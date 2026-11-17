@@ -116,11 +116,12 @@ impl Condition {
                 v.tree.parent_window(w).is_some_and(|win| v.tree.node_ref(win).is_some_and(|x| x.is_active_window()))
             }
             CondProp::Axis => {
-                let axis = n.behaviour().map(|b| b.axis()).unwrap_or_default();
+                // A busy widget (its hook is running) answers from its node's copy.
+                let axis = n.behaviour().map(|b| b.axis()).unwrap_or(n.node.axis);
                 TbId::new(if axis == Axis::X { "x" } else { "y" }) == self.value
             }
             CondProp::Align => {
-                let Some(a) = n.behaviour().and_then(|b| b.align()) else { return false };
+                let Some(a) = n.behaviour().map(|b| b.align()).unwrap_or(n.node.align) else { return false };
                 let s = match a {
                     Align::Left => "left",
                     Align::Top => "top",

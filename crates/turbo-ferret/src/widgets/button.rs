@@ -46,6 +46,18 @@ impl Button {
         self.layout
     }
 
+    /// Let the text shrink below its preferred width (it is then cut with an
+    /// ellipsis). TB: TBButton::SetSqueezable
+    pub fn set_squeezable(&mut self, cx: &mut Ctx, squeezable: bool) {
+        let Some(t) = self.textfield else { return };
+        if let Some(tf) = cx.get_mut::<TextField>(t) {
+            if tf.squeezable != squeezable {
+                tf.squeezable = squeezable;
+                cx.invalidate_layout(t);
+            }
+        }
+    }
+
     /// Toggle mode, or a member of a radio-like group. TB: CanToggle
     fn can_toggle(&self, cx: &Ctx) -> bool {
         self.toggle_mode || cx.node(cx.this()).is_some_and(|n| n.group_id().is_some())
@@ -89,12 +101,8 @@ impl Widget for Button {
     fn on_inflate(&mut self, cx: &mut Ctx, res: &ResNode) {
         self.auto_repeat = res.int("auto-repeat", self.auto_repeat as i32) != 0;
         self.toggle_mode = res.int("toggle-mode", self.toggle_mode as i32) != 0;
-        if let (Some(n), Some(t)) = (res.get("squeezable"), self.textfield) {
-            let sq = n.value.as_int() != 0;
-            if let Some(tf) = cx.get_mut::<TextField>(t) {
-                tf.squeezable = sq;
-            }
-            cx.invalidate_layout(t);
+        if let Some(n) = res.get("squeezable") {
+            self.set_squeezable(cx, n.value.as_int() != 0);
         }
     }
 
