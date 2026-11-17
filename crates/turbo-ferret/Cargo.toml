@@ -4,16 +4,21 @@ description = "A small, host-driven UI toolkit for games. A Rust port of Turbo B
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+# The code is zlib. The built-in font (src/font/default, feature `default-font`) is
+# DejaVu Sans, under the Bitstream Vera licence with the DejaVu and Arev additions.
+license = "Zlib AND Bitstream-Vera"
 readme = "README.md"
 keywords = ["ui", "gui", "game", "no_std", "widgets"]
 categories = ["gui", "game-development", "no-std"]
-include = ["src/**/*.rs", "Cargo.toml", "README.md", "LICENSE", "NOTICE"]
+include = ["src/**/*.rs", "src/font/default/*", "Cargo.toml", "README.md", "LICENSE", "NOTICE"]
 
 [features]
-default = ["std", "png"]
+default = ["std", "png", "default-font"]
 std = []
 png = []
+# A built-in font (DejaVu Sans as bitmaps), so text is readable before a font is
+# loaded. It has its own licence: see src/font/default/LICENSE-DejaVu.txt.
+default-font = ["png"]
 debug = []
 
 [dependencies]

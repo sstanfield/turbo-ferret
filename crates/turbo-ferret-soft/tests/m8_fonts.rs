@@ -35,10 +35,10 @@ fn truetype_text_golden() {
     ui.services_mut().log = None;
     ui.load_skin("default_skin/skin.tb.txt", None).unwrap();
     ui.fonts_mut().add_backend(Box::new(TtfBackend::new()));
-    ui.add_font("Vera", "vera.ttf");
+    ui.add_font("DejaVu", "DejaVuSans.ttf");
     // The same file under a second name, for the blurred copy.
-    ui.add_font("VeraGlow", "vera.ttf");
-    let (vera, glow) = (tbid!("Vera"), tbid!("VeraGlow"));
+    ui.add_font("DejaVuGlow", "DejaVuSans.ttf");
+    let (vera, glow) = (tbid!("DejaVu"), tbid!("DejaVuGlow"));
     for s in [9, 28] {
         assert!(ui.create_font_face(FontDesc::new(vera, s)));
     }
@@ -65,4 +65,34 @@ fn truetype_text_golden() {
     r.clear(BG);
     ui.paint(&mut r);
     assert_golden("truetype_text", &r);
+}
+
+/// Out of the box: a `Ui` with the default skin and no font loaded shows its text in
+/// the built-in font. (The dash in the text is outside its characters, printable
+/// ASCII and Latin-1: it draws as a question mark, as in any bitmap font.)
+#[test]
+fn built_in_font_golden() {
+    let res = format!("{}/../../resources", env!("CARGO_MANIFEST_DIR"));
+    let size = Size::new(360, 120);
+    let mut ui = Ui::new(Config::default(), Services::with_loader(FsLoader::new(res)));
+    ui.services_mut().log = None;
+    ui.load_skin("default_skin/skin.tb.txt", None).unwrap();
+    ui.set_viewport(size);
+    let root = ui.root();
+    let src = "TBLayout: axis: y, position: left\n\
+        \tTBTextField: text: \"No font was loaded: this is the built-in one.\"\n\
+        \tTBLayout\n\
+        \t\tTBButton: text: \"Button\"\n\
+        \t\tTBCheckBox: value: 1\n\
+        \t\tTBTextField: text: \"Café, naïve, 100 % — ¿qué?\"\n\
+        \tTBEditField: text: \"An edit field\", gravity: left right\n";
+    let ids = ui.inflate(root, src).unwrap();
+    ui.set_rect(ids[0], Rect::new(10, 8, 340, 104));
+    ui.update();
+    assert_eq!(ui.default_font(), FontDesc::new(turbo_ferret::font::DEFAULT_FONT, 14));
+
+    let mut r = SoftRenderer::new(size);
+    r.clear(BG);
+    ui.paint(&mut r);
+    assert_golden("built_in_font", &r);
 }

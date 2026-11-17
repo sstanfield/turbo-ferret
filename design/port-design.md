@@ -91,6 +91,7 @@ turbo-ferret/                (workspace root)
 |---|---|---|---|
 | `std` | on | `FsLoader` (files through `std::fs`), and the stderr log sink | none |
 | `png` | on | `PngDecoder`, the default `ImageDecoder` (hand-rolled, `png.rs` + `inflate.rs`) | none |
+| `default-font` | on | Built-in font: DejaVu Sans as bitmaps (decisions-and-status.md, deviation 58). Needs `png` | none |
 | `debug` | off | Debug overlay (layout bounds, atlas view), recorded ID strings for collision warnings (H-20) | none |
 | ~~`truetype`~~ | not a feature | TrueType became the crate `turbo-ferret-ttf` with its own engine (decisions-and-status.md, deviation 39) | none |
 

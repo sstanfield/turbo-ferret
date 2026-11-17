@@ -179,6 +179,14 @@ impl Ui {
             debug: Default::default(),
         };
         crate::widgets::register_builtins(&mut ui);
+        // Text is readable from the start: the built-in font at the size for the
+        // screen's DPI (14 pixels at 96 DPI). `set_default_font` replaces it.
+        #[cfg(feature = "default-font")]
+        {
+            let size = (14 * i64::from(ui.config.dpi.max(1)) + 48) / 96;
+            let size = size.clamp(1, 255) as u16;
+            ui.set_default_font(FontDesc::new(crate::font::DEFAULT_FONT, size));
+        }
         ui
     }
 

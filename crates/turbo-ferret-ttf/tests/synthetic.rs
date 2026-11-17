@@ -550,7 +550,7 @@ fn damaged_files_do_not_panic() {
         }
     }
     // The real font, damaged in its tables' first kilobytes and anywhere.
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../resources/vera.ttf");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../resources/DejaVuSans.ttf");
     let full = std::fs::read(path).unwrap();
     for i in 0..300 {
         let mut data = full.clone();

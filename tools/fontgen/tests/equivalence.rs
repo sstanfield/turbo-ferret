@@ -10,18 +10,18 @@ use turbo_ferret_fontgen::{Error, Options, generate, parse_chars};
 use turbo_ferret_soft::SoftRenderer;
 use turbo_ferret_ttf::{Font, TtfBackend, TtfFace};
 
-fn vera() -> Vec<u8> {
-    std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../resources/vera.ttf")).unwrap()
+fn dejavu() -> Vec<u8> {
+    std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../resources/DejaVuSans.ttf")).unwrap()
 }
 
 fn options(sizes: &[u16]) -> Options {
-    Options { stem: "vera".into(), sizes: sizes.to_vec(), chars: Options::default_chars() }
+    Options { stem: "dejavu".into(), sizes: sizes.to_vec(), chars: Options::default_chars() }
 }
 
 /// The generated files in a loader, under `fonts/`.
 fn loader_with(output: &turbo_ferret_fontgen::Output) -> MemLoader {
     let mut loader = MemLoader::new();
-    for (name, data) in output.files("vera") {
+    for (name, data) in output.files("dejavu") {
         loader.add_owned(&format!("fonts/{name}"), data);
     }
     loader
@@ -29,7 +29,7 @@ fn loader_with(output: &turbo_ferret_fontgen::Output) -> MemLoader {
 
 #[test]
 fn every_glyph_is_the_same_as_the_rasterizer_draws() {
-    let ttf = vera();
+    let ttf = dejavu();
     let output = generate(&ttf, &options(&[11, 14, 28])).unwrap();
     assert!(output.missing.is_empty());
     assert_eq!(output.bitmaps.len(), 3);
@@ -40,7 +40,7 @@ fn every_glyph_is_the_same_as_the_rasterizer_draws() {
     for size in [11u16, 14, 28] {
         let data = output.description.clone().into_bytes();
         let mut cx = LoadCtx::new(&mut loader, &mut images);
-        let mut baked = TbbfFont::load("fonts/vera.tb.txt", &data, size, &mut cx).expect("the bitmap font loads");
+        let mut baked = TbbfFont::load("fonts/dejavu.tb.txt", &data, size, &mut cx).expect("the bitmap font loads");
         assert!(baked.has_glyph_table());
         assert_eq!(baked.size(), size);
         let mut live = TtfFace::new(font.clone(), size);
@@ -73,23 +73,23 @@ fn a_ui_looks_the_same_with_either_font() {
         \tTBButton: text: \"Résumé & naïve café (100%)\"\n\
         \tTBTextField: text: \"Larger: Ágætis byrjun\"\n\
         \t\tfont: size: 28\n";
-    let ttf = vera();
+    let ttf = dejavu();
     let output = generate(&ttf, &options(&[14, 28])).unwrap();
     let size = Size::new(420, 120);
     let render = |baked: bool| -> Vec<u8> {
         let mut loader = loader_with(&output);
-        loader.add_owned("fonts/vera.ttf", ttf.clone());
+        loader.add_owned("fonts/DejaVuSans.ttf", ttf.clone());
         let mut ui = Ui::new(Config::default(), Services::with_loader(loader));
         ui.services_mut().log = None;
         ui.set_viewport(size);
         if baked {
-            ui.add_font("Vera", "fonts/vera.tb.txt");
+            ui.add_font("DejaVu", "fonts/dejavu.tb.txt");
         } else {
             ui.fonts_mut().add_backend(Box::new(TtfBackend::new()));
-            ui.add_font("Vera", "fonts/vera.ttf");
+            ui.add_font("DejaVu", "fonts/DejaVuSans.ttf");
         }
-        assert!(ui.create_font_face(FontDesc::new(tbid!("Vera"), 28)));
-        assert!(ui.set_default_font(FontDesc::new(tbid!("Vera"), 14)));
+        assert!(ui.create_font_face(FontDesc::new(tbid!("DejaVu"), 28)));
+        assert!(ui.set_default_font(FontDesc::new(tbid!("DejaVu"), 14)));
         let root = ui.root();
         let ids = ui.inflate(root, SRC).unwrap();
         ui.set_rect(ids[0], Rect::new(8, 8, 404, 104));
@@ -107,9 +107,9 @@ fn a_ui_looks_the_same_with_either_font() {
 
 #[test]
 fn bitmaps_are_packed_without_overlap() {
-    let output = generate(&vera(), &options(&[20])).unwrap();
+    let output = generate(&dejavu(), &options(&[20])).unwrap();
     let b = &output.bitmaps[0];
-    assert_eq!(b.file_name, "vera_20.png");
+    assert_eq!(b.file_name, "dejavu_20.png");
     assert!(b.width.is_power_of_two() && b.width <= 512 && b.height <= 512, "{}x{}", b.width, b.height);
     // Read the table back and check that no two glyph rects touch.
     let mut rects = Vec::new();
@@ -138,7 +138,7 @@ fn bitmaps_are_packed_without_overlap() {
 fn characters_the_font_lacks_are_reported_and_left_out() {
     let mut opts = options(&[14]);
     opts.chars = "Ab\u{e000}A\u{10ffff}".chars().collect();
-    let output = generate(&vera(), &opts).unwrap();
+    let output = generate(&dejavu(), &opts).unwrap();
     assert_eq!(output.missing, ['\u{e000}', '\u{10ffff}']);
     let glyphs: Vec<&str> = output.description.lines().filter(|l| l.starts_with("\t\tU+")).collect();
     assert_eq!(glyphs.len(), 3, "the space (always), A and b, once each: {glyphs:?}");
@@ -149,14 +149,14 @@ fn characters_the_font_lacks_are_reported_and_left_out() {
 #[test]
 fn errors() {
     assert_eq!(generate(b"not a font", &options(&[14])), Err(Error::NotAFont));
-    assert_eq!(generate(&vera(), &options(&[])), Err(Error::NothingToDo));
+    assert_eq!(generate(&dejavu(), &options(&[])), Err(Error::NothingToDo));
     let mut opts = options(&[14]);
     opts.chars = vec!['\u{e000}'];
-    assert_eq!(generate(&vera(), &opts), Err(Error::NothingToDo));
+    assert_eq!(generate(&dejavu(), &opts), Err(Error::NothingToDo));
     // Thousands of large glyphs do not fit.
     let mut opts = options(&[400]);
     opts.chars = ('\u{20}'..='\u{2ff}').collect();
-    assert_eq!(generate(&vera(), &opts), Err(Error::TooLarge(400)));
+    assert_eq!(generate(&dejavu(), &opts), Err(Error::TooLarge(400)));
 }
 
 #[test]
@@ -171,14 +171,16 @@ fn character_lists() {
     assert_eq!(parse_chars("U+D7FF-U+E000").unwrap(), ['\u{d7ff}', '\u{e000}']);
 }
 
-/// `resources/vera_font` is this tool's output for `resources/vera.ttf`. If the
+/// The font built into the core crate (`crates/turbo-ferret/src/font/default`) is
+/// this tool's output for `resources/DejaVuSans.ttf`. If the
 /// rasterizer or the tool changes what it writes, generate the files again:
-/// `cargo run -p turbo-ferret-fontgen -- resources/vera.ttf --sizes 14,21,28 --out resources/vera_font/vera`
+/// `cargo run -p turbo-ferret-fontgen -- resources/DejaVuSans.ttf --sizes 14,21,28 --out crates/turbo-ferret/src/font/default/dejavu_sans`
 #[test]
 fn the_font_in_resources_is_up_to_date() {
-    let output = generate(&vera(), &options(&[14, 21, 28])).unwrap();
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../resources/vera_font");
-    for (name, data) in output.files("vera") {
+    let opts = Options { stem: "dejavu_sans".into(), ..options(&[14, 21, 28]) };
+    let output = generate(&dejavu(), &opts).unwrap();
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../crates/turbo-ferret/src/font/default");
+    for (name, data) in output.files("dejavu_sans") {
         let on_disk = std::fs::read(format!("{dir}/{name}")).unwrap_or_default();
         if name.ends_with(".png") {
             // Compare the pixels: the PNG encoder may compress differently one day.

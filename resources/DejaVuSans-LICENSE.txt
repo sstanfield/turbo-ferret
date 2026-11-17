@@ -1,7 +1,14 @@
-vera.ttf is the file Turbo Badger ships as resources/vera.ttf. It is the font
-"DejaVu Sans" (Version 2.32).
+DejaVuSans.ttf is the font "DejaVu Sans" (Version 2.32), unchanged. Turbo Badger
+ships the same file as resources/vera.ttf.
 
-The font's own copyright and license notices, as stored in the file, follow.
+The bitmap font built into the turbo-ferret crate (src/font/default) is made from
+it by turbo-ferret-fontgen: its glyphs for U+0020 to U+007E and U+00A0 to U+00FF,
+rasterized at 14, 21 and 28 pixels. As the licence below asks of altered versions,
+it is not called "Bitstream", "Vera" or "Arev".
+
+The font's own copyright and licence notices, as stored in the file, follow. They
+have to go with every copy of the font, the built-in bitmaps included: an
+application that is shipped with them should carry these notices too.
 
 ----------------------------------------------------------------------
 

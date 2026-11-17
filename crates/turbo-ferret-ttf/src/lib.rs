@@ -9,8 +9,8 @@
 //!
 //! ```ignore
 //! ui.fonts_mut().add_backend(Box::new(turbo_ferret_ttf::TtfBackend::new()));
-//! ui.add_font("Vera", "vera.ttf");
-//! ui.create_font_face(FontDesc::new(tbid!("Vera"), 14));
+//! ui.add_font("DejaVu", "DejaVuSans.ttf");
+//! ui.create_font_face(FontDesc::new(tbid!("DejaVu"), 14));
 //! ```
 //!
 //! Glyphs are rasterized on first use into the core's glyph cache, like any other

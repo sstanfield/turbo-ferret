@@ -446,8 +446,8 @@ fn demo_m8_windows_headless() {
     let segoe = demo.ui.calculated_font(edit);
     let segoe_width = demo.ui.text_width(segoe, "Turbo Ferret");
     for (item_id, font, shot_name) in [
-        (tbid!("ttf font Vera"), tbid!("Vera"), "demo_m8_truetype.png"),
-        (tbid!("ttf font VeraGlow"), tbid!("VeraGlowText"), "demo_m8_truetype_glow.png"),
+        (tbid!("ttf font DejaVu"), tbid!("DejaVu"), "demo_m8_truetype.png"),
+        (tbid!("ttf font DejaVuGlow"), tbid!("DejaVuGlowText"), "demo_m8_truetype_glow.png"),
     ] {
         click_id(&mut demo, text_win, tbid!("menu"));
         run(&mut demo, 300);

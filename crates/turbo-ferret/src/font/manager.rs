@@ -282,6 +282,15 @@ impl FontManager {
             return true;
         }
         let Some(info) = self.infos.get(&desc.id) else {
+            // The built-in font needs no file (unless a font was registered under
+            // its name, which is then used instead).
+            #[cfg(feature = "default-font")]
+            if desc.id == super::default_font::DEFAULT_FONT {
+                if let Some(font) = super::default_font::default_font(desc.size) {
+                    self.faces.insert(desc, FontFace::new(desc, Box::new(font)));
+                    return true;
+                }
+            }
             return false;
         };
         let path = if cx.path.is_empty() { info.path.clone() } else { cx.loader.resolve(cx.path, &info.path) };

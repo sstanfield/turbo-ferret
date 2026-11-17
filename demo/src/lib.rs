@@ -152,8 +152,8 @@ fn text_menu_source() -> SourceRef {
             ("RGB font (Orangutang)", "rgb font Orangutang"),
             ("RGB font (Orange)", "rgb font Orange"),
             // Not in TB's menu: its demo is built with the bitmap font renderer only.
-            ("TrueType font (Vera)", "ttf font Vera"),
-            ("TrueType font with a glow", "ttf font VeraGlow"),
+            ("TrueType font (DejaVu Sans)", "ttf font DejaVu"),
+            ("TrueType font with a glow", "ttf font DejaVuGlow"),
             ("-", ""),
             ("Glyph cache stresstest (CJK)", "CJK"),
             ("-", ""),
@@ -188,15 +188,15 @@ fn text_menu_choice(ui: &mut Ui, edit: WidgetId, choice: TbId) {
         with_font_id(ui, "Orangutang");
     } else if choice == tbid!("rgb font Orange") {
         with_font_id(ui, "Orange");
-    } else if choice == tbid!("ttf font Vera") {
-        with_font_id(ui, "Vera");
-    } else if choice == tbid!("ttf font VeraGlow") {
+    } else if choice == tbid!("ttf font DejaVu") {
+        with_font_id(ui, "DejaVu");
+    } else if choice == tbid!("ttf font DejaVuGlow") {
         // A face with a blurred copy of itself behind it. Both come from the same
         // file, registered under two names (see `Demo::new`).
         let mut fd = ui.default_font();
-        fd.id = tbid!("VeraGlowText");
+        fd.id = tbid!("DejaVuGlowText");
         fd.size = ui.dimension_converter().dp_to_px(20).clamp(1, 255) as u16;
-        let glow = FontDesc::new(tbid!("VeraGlow"), fd.size);
+        let glow = FontDesc::new(tbid!("DejaVuGlow"), fd.size);
         ui.create_font_face(fd);
         ui.create_font_face(glow);
         let radius = ui.dimension_converter().dp_to_px(3).clamp(1, 64) as u8;
@@ -699,12 +699,12 @@ impl Demo {
         ui.add_font("Neon", "demo_fonts/neon.tb.txt");
         ui.add_font("Orangutang", "demo_fonts/orangutang.tb.txt");
         ui.add_font("Orange", "demo_fonts/orange.tb.txt");
-        // TrueType: the font TB ships as vera.ttf, under three names so the text
+        // TrueType: DejaVu Sans (the font TB ships as vera.ttf), under three names so the text
         // window can show it plain and with a blurred copy behind it.
         // TB: Demo01.cpp (register_stb_font_renderer, AddFontInfo("resources/vera.ttf", "Vera"))
         ui.fonts_mut().add_backend(Box::new(turbo_ferret_ttf::TtfBackend::new()));
-        for name in ["Vera", "VeraGlowText", "VeraGlow"] {
-            ui.add_font(name, "vera.ttf");
+        for name in ["DejaVu", "DejaVuGlowText", "DejaVuGlow"] {
+            ui.add_font(name, "DejaVuSans.ttf");
         }
         let size = ui.dimension_converter().dp_to_px(14).clamp(1, 255) as u16;
         if !ui.set_default_font(FontDesc::new(tbid!("Segoe"), size)) {

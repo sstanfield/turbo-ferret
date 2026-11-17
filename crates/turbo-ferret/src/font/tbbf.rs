@@ -29,7 +29,7 @@
 //!
 //! ```text
 //! size 14
-//!     bitmap vera_14.png
+//!     bitmap dejavu_sans_14.png
 //!     ascent 13
 //!     descent 3
 //!     height 16               line height, if not ascent + descent

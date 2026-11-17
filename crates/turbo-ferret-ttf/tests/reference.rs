@@ -1,14 +1,14 @@
 //! The rasterizer against an established one (fontdue, a dev-dependency only), on
-//! the font TB ships as `vera.ttf` (DejaVu Sans).
+//! DejaVu Sans (the font TB ships as `vera.ttf`).
 
 use std::rc::Rc;
 
 use turbo_ferret::font::{GlyphImage, GlyphSource};
 use turbo_ferret_ttf::{Font, TtfFace};
 
-fn vera() -> Vec<u8> {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../resources/vera.ttf");
-    std::fs::read(path).expect("resources/vera.ttf")
+fn dejavu() -> Vec<u8> {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../resources/DejaVuSans.ttf");
+    std::fs::read(path).expect("resources/DejaVuSans.ttf")
 }
 
 /// Left margin of the canvas the glyph images are compared on.
@@ -30,7 +30,7 @@ fn place(canvas: &mut [u8], cw: i32, ch: i32, x: i32, y: i32, w: i32, h: i32, da
 
 #[test]
 fn glyphs_match_the_reference_rasterizer() {
-    let data = vera();
+    let data = dejavu();
     let reference = fontdue::Font::from_bytes(&data[..], fontdue::FontSettings::default()).unwrap();
     let font = Rc::new(Font::parse(data).expect("parse"));
 
@@ -91,7 +91,7 @@ fn glyphs_match_the_reference_rasterizer() {
 
 #[test]
 fn face_metrics_match_the_reference() {
-    let data = vera();
+    let data = dejavu();
     let reference = fontdue::Font::from_bytes(&data[..], fontdue::FontSettings::default()).unwrap();
     let font = Rc::new(Font::parse(data).unwrap());
     assert_eq!(font.units_per_em(), 2048);
@@ -137,7 +137,7 @@ fn supersampled(font: &Rc<Font>, c: char, size: u16, cw: i32, ch: i32) -> Vec<u8
 
 #[test]
 fn coverage_is_accurate() {
-    let data = vera();
+    let data = dejavu();
     let reference = fontdue::Font::from_bytes(&data[..], fontdue::FontSettings::default()).unwrap();
     let font = Rc::new(Font::parse(data).unwrap());
     let (mut our_max, mut ref_max) = (0u8, 0u8);
@@ -185,7 +185,7 @@ fn coverage_is_accurate() {
 /// limit; the test pins how large the effect is.
 #[test]
 fn overlapping_contours_are_slightly_bold_at_the_joint() {
-    let font = Rc::new(Font::parse(vera()).unwrap());
+    let font = Rc::new(Font::parse(dejavu()).unwrap());
     for size in [14u16, 37] {
         let (cw, ch) = (i32::from(size) * 3 + 2 * PAD, i32::from(size) * 4);
         let truth = supersampled(&font, 'Ç', size, cw, ch);

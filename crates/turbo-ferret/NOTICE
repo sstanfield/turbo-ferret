@@ -30,3 +30,11 @@ freely, subject to the following restrictions:
 
     3. This notice may not be removed or altered from any source
     distribution.
+
+----------------------------------------------------------------------
+
+The built-in font (crates/turbo-ferret/src/font/default, feature
+"default-font") is DejaVu Sans, rasterized into bitmaps. It is under its own
+licence, the Bitstream Vera licence with the DejaVu and Arev additions:
+see src/font/default/LICENSE-DejaVu.txt in the turbo-ferret crate. Its
+notices have to accompany every copy of the font, these bitmaps included.
