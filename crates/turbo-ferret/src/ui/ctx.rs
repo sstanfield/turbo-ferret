@@ -186,6 +186,14 @@ pub(crate) fn call_hook<R>(ui: &mut Ui, id: WidgetId, f: impl FnOnce(&mut dyn Wi
     if let Some(node) = ui.tree.nodes.get_mut(id) {
         node.behaviour = Some(b);
     }
+    if !ui.pending.die_when_free.is_empty() {
+        if let Some(i) = ui.pending.die_when_free.iter().position(|&d| d == id) {
+            ui.pending.die_when_free.swap_remove(i);
+            ui.depth += 1;
+            ui.die_finish(id);
+            ui.depth -= 1;
+        }
+    }
     if ui.depth == 0 {
         ui.flush();
     }

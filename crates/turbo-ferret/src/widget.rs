@@ -232,6 +232,11 @@ pub trait Widget: Any {
     fn measure_adds_skin(&self) -> bool {
         true
     }
+    /// Adjust the final preferred size (after skin and padding were applied).
+    /// TB: widgets overriding OnCalculatePreferredSize to post-process TBWidget's result
+    fn after_measure(&self, ps: PreferredSize) -> PreferredSize {
+        ps
+    }
     /// Lay out children for a new size. Default: gravity anchoring (TB OnResized).
     fn arrange(&mut self, cx: &mut Ctx, old: Size, new: Size) {
         cx.default_arrange(old, new)

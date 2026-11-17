@@ -240,6 +240,20 @@ impl Ui {
         if self.input.captured.is_some_and(|c| self.tree.is_ancestor_of(id, c)) {
             self.set_captured(None);
         }
+        // Dying from inside its own hook (a window closing itself from on_event):
+        // finish when that hook returns, so on_die still runs.
+        if self.tree.live(id).is_some_and(|n| n.behaviour.is_none()) {
+            self.pending.die_when_free.push(id);
+            return;
+        }
+        self.die_finish(id);
+    }
+
+    /// on_die, dying listeners, then remove unless kept alive.
+    pub(crate) fn die_finish(&mut self, id: WidgetId) {
+        if !self.tree.is_live(id) {
+            return;
+        }
         let action = call_hook(self, id, |w, cx| w.on_die(cx)).unwrap_or(DieAction::Remove);
         let mut keep = action == DieAction::KeepAlive;
         let ids = self.listener_ids(Some(id));
@@ -328,6 +342,9 @@ impl Ui {
         };
         if adds_skin {
             self.apply_skin_sizes(id, &mut ps);
+        }
+        if let Some(b) = self.tree.live(id).and_then(|n| n.behaviour.as_deref()) {
+            ps = b.after_measure(ps);
         }
         if let Some(lp) = &lp {
             lp.apply(&mut ps);

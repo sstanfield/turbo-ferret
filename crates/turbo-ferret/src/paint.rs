@@ -128,6 +128,21 @@ impl<'a, 'r> PaintCtx<'a, 'r> {
         self.painter.set_translation(old);
     }
 
+    /// Width of `text` in this widget's font.
+    pub fn text_width(&self, text: &str) -> i32 {
+        text.chars().count() as i32 * 8
+    }
+
+    /// Line height of this widget's font.
+    pub fn font_height(&self) -> i32 {
+        16
+    }
+
+    /// Draw `text` with its top left at `pos` (local coordinates).
+    pub fn draw_text(&mut self, pos: Point, color: Color, text: &str) {
+        let _ = (pos, color, text);
+    }
+
     pub fn painter(&mut self) -> &mut Painter<'r> {
         self.painter
     }

@@ -10,6 +10,7 @@ mod listen;
 mod node;
 mod ops;
 mod process;
+mod text;
 pub(crate) mod tree;
 mod value_group;
 mod view;
@@ -83,6 +84,8 @@ impl Widget for Root {
 pub(crate) struct Pending {
     /// Detached subtrees waiting to be freed.
     pub free: Vec<WidgetId>,
+    /// Widgets that started dying inside their own hook.
+    pub die_when_free: Vec<WidgetId>,
 }
 
 pub struct Ui {
@@ -112,6 +115,7 @@ pub struct Ui {
     /// Dimension conversion (set from the skin at M3).
     pub(crate) dim: DimensionConverter,
     pub(crate) skin: crate::skin::Skin,
+    pub(crate) anims: crate::anim::Animations,
 }
 
 impl Ui {
@@ -139,6 +143,7 @@ impl Ui {
             refs: RefTrees::default(),
             dim: DimensionConverter::new(96, 96, 96),
             skin: crate::skin::Skin::default(),
+            anims: Default::default(),
         };
         crate::widgets::register_builtins(&mut ui);
         ui

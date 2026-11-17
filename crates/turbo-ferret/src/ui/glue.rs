@@ -125,12 +125,4 @@ impl Ui {
         self.skin.atlas.renderer_lost();
         self.repaint = true;
     }
-
-    pub(crate) fn update_animations(&mut self) {}
-
-    pub(crate) fn has_running_animations(&self) -> bool {
-        false
-    }
-
-    pub(crate) fn forget_animations(&mut self, _subtree_root: WidgetId) {}
 }
