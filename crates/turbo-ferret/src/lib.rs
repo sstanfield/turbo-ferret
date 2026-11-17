@@ -19,6 +19,7 @@ extern crate std;
 
 pub mod anim;
 pub mod arena;
+pub mod edit;
 pub mod event;
 mod flags;
 pub mod font;
