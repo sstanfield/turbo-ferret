@@ -5,7 +5,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-include = ["src/**/*.rs", "Cargo.toml", "LICENSE", "NOTICE"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "LICENSE", "NOTICE"]
 
 [dependencies]
 turbo-ferret = { path = "../turbo-ferret", default-features = false }

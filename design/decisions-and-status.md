@@ -1,6 +1,6 @@
 # Turbo Ferret (Rust port of Turbo Badger): Decisions and Status
 
-*Hand-off notes so that work can resume without re-asking. Last updated 2026-11-17 (design accepted, named Turbo Ferret). Project memory is off, so this file is the record.*
+*Hand-off notes so that work can resume without re-asking. Last updated 2026-11-17 (M0 to M4 implemented). This file is the record.*
 
 ## Where things stand
 
@@ -10,7 +10,7 @@
 | 2. Assess ECS-style widget storage | Done, agreed | [ecs-widget-storage-assessment.md](ecs-widget-storage-assessment.md): verdict, option C, `no_std` costs, questions `M-01` to `M-08` |
 | 3. Mutability design | Done, agreed (five decisions below) | This file, section "Mutability" |
 | 4. Full port design | Done, accepted by Steve 2026-11-17 | [port-design.md](port-design.md): crates, core types, traits, event/layout/paint flow, milestones M0 to M8 |
-| 5. Implementation with Claude Code | **Next.** Starts at M0 in port-design.md section 20 | |
+| 5. Implementation with Claude Code | M0 to M4 done 2026-11-17 (see "Implementation status" below). Next: M5 | Workspace in the repo root |
 
 **Original project:** Turbo Badger by Emil Segerås, zlib licence (copyright 2011 to 2014, see `src/tb/tb_core.h`). The port must credit it and ship its notice: see port-design.md section 0.
 
@@ -41,7 +41,43 @@
 
 ## Still open
 
-Nothing. The design is complete and accepted; implementation starts at M0.
+Nothing blocking. Implementation notes and the deviations made while implementing are in the next section.
+
+## Implementation status (2026-11-17)
+
+| Milestone | Status | Where |
+|---|---|---|
+| M0 Foundations | Done | `id`, `geom` (+ `Region`), `value`, `arena`, `math`, `services`, `res` (parser, ref trees, `@file`/`@include`/`@if`), `lang`. TB's parser, value, node-ref-tree, color and geometry tests ported; every `*.tb.txt` in `resources/` parses |
+| M1 Tree and dispatch | Done | `ui/` (tree, `Ctx`, take-out hooks, detach-now/free-at-flush, die, listeners, bubbling, pointer/wheel/key/touch, capture, hover, focus, windows, Tab, long click, messages, value binding). `tests/m1_tree.rs` |
+| M2 Layout and inflation | Done | `layout/` (size types, `stack.rs`, `dim.rs`), measure cache, `reader.rs` (registry, generic properties, inflation). `tests/m2_layout.rs`; every demo01 layout inflates |
+| M3 Rendering, skin, fonts | Done | `render/` (renderer trait, painter, atlas), `skin/`, `font/` (TBBF, manager, glyph cache), `paint.rs`, hand-rolled `image/` (PNG + inflate, byte-identical to the `png` crate on all 146 resource PNGs, fuzzed), `turbo-ferret-soft`, goldens in `tests/golden/` |
+| M4 Basic widgets, animation, demo | Done (see the miniquad note) | `widgets/` (TextField, Button, ClickLabel, SkinImage, Separator, ProgressSpinner, CheckBox, RadioButton, ScrollBar, Slider, Container, Layout, Mover, Resizer, Dimmer, Window), `anim.rs`, `demo/` |
+
+### Deviations from port-design.md made during implementation
+
+Each keeps TB's behaviour or fixes a problem found while porting; none adds a dependency to the core.
+
+1. **`on_inflate` runs before the generic properties**, as TB's subclass `OnInflate` did before calling `TBWidget::OnInflate` (a slider must get its limits before its `value`).
+2. **Unknown widget names in resources are skipped with a warning, not an error.** TB resources hold data nodes such as `WindowInfo`, and TB skipped nodes without a factory.
+3. **`children_clip(&self, padding: Rect) -> Option<Rect>`** replaces `clips_children() -> bool`, because `Layout` clips to its padding rect plus "fluff" on the unscrolled sides (TB `TBLayout::OnPaintChildren`).
+4. **Extra trait hooks:** `on_window_active_changed` (a window's mover shows the active state), `after_measure` (TB widgets that post-process `OnCalculatePreferredSize`: skin images, check boxes), `measure_adds_skin` (a window adds its own padding and title), `extra_padding` (TB's overridden `GetPaddingRect`), `align` (the skin's `align` condition).
+5. **Inflated children are placed after their own children are inflated**, so the preferred size includes them (TB placed them before).
+6. **`die()` from inside the widget's own hook** (a window closing itself from `on_event`) runs `on_die` when that hook returns, instead of skipping it as busy.
+7. **A node caches `extra_padding`** when its behaviour is put back, so padding is right while its own hook runs.
+8. **Skin updates use one dirty flag** (re-resolve strong overrides for the whole tree, as TB did), not a per-node `SKIN_STATE_DIRTY` flag.
+9. **Long click is armed for touch only**, as in TB.
+10. **Panning scrolls directly** (no kinetic scroller) until M5 brings `Scroller`.
+11. **`Color` is a struct of four `u8`s** (straight alpha) rather than `Color(u32)`.
+12. **The skin condition target `ancestors`** no longer falls through to `prev sibling` (a missing `break` in TB).
+13. **Busy semantics, as designed, with these visible effects:** a widget's own `on_event` is not called for events it emits from its own hooks; a widget that removes itself from its own hook gets no `on_removed`; a parent that adds or removes children from its own hook gets no `on_child_added`/`on_child_removed`.
+14. **The demo main window** is `resources/demo/main_window.tb.txt`, modeled on TB's `test_ui.tb.txt` but without `TBSection` (an M5 widget).
+
+### Dependencies
+
+- Core: none. Dev-only: `png` (oracle for the PNG decoder tests, and writing golden images).
+- `turbo-ferret-soft`: `turbo-ferret` only.
+- `turbo-ferret-miniquad`: `miniquad` (decision 9; it only pulls platform system crates).
+
 
 ---
 
@@ -160,7 +196,7 @@ These were the first thoughts on what sits behind traits. The refined proposal i
 
 These are **not services**, just internal choices: the hash map (`BTreeMap`, `hashbrown` or a small `u32`-keyed map), float math (`libm` or a few helpers), and string formatting (`alloc::format!`). The **renderer** is already a host-implemented trait passed in at paint time, so it has no std question.
 
-## File index (`/mnt/project-files/architecture/`)
+## File index (`design/`)
 
 - `turbobadger-architecture.md`: the C++ architecture breakdown and Rust hazard catalogue (H-01 to H-22).
 - `ecs-widget-storage-assessment.md`: the ECS versus arena assessment, verdict, `no_std` costs and mutability questions (M-01 to M-08).
