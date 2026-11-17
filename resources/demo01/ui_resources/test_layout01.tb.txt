@@ -28,10 +28,10 @@ TBLayout
 			text Select position
 			id select position
 			items
-				item: text: "LAYOUT_POSITION_CENTER"
-				item: text: "LAYOUT_POSITION_LEFT_TOP"
-				item: text: "LAYOUT_POSITION_RIGHT_BOTTOM"
-				item: text: "LAYOUT_POSITION_GRAVITY"
+				item: text: "Position: center"
+				item: text: "Position: left / top"
+				item: text: "Position: right / bottom"
+				item: text: "Position: gravity"
 		TBButton
 			text Toggle axis
 			id toggle axis

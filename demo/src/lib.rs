@@ -13,10 +13,11 @@ use std::rc::Rc;
 
 use turbo_ferret::anim::{ALMOST_ZERO_OPACITY, AnimSpec, Curve};
 use turbo_ferret::font::BackgroundFont;
+use turbo_ferret::layout::stack::LayoutPosition;
 use turbo_ferret::widgets::{
-    Button, EditField, ImageWidget, MessageButtons, MessageSettings, PopupAlignment, ResizeFit, ScrollContainer,
-    ScrollMode, SelectDropdown, SelectList, SkinImage, SourceRef, StringItem, StringItemSource, TabContainer,
-    TextAlign, Window,
+    Button, EditField, ImageWidget, Layout, MessageButtons, MessageSettings, PopupAlignment, ResizeFit,
+    ScrollContainer, ScrollMode, SelectDropdown, SelectList, SkinImage, SourceRef, StringItem, StringItemSource,
+    TabContainer, TextAlign, Window,
 };
 use turbo_ferret::*;
 
@@ -272,6 +273,8 @@ fn list_of_layout(ui: &Ui, layout: WidgetId) -> Option<WidgetId> {
 /// AdvancedItemWidget
 struct DemoListener {
     tab_axis: Axis,
+    /// The axis the layout test window's "Toggle axis" sets next.
+    layout_axis: Axis,
     sources: Sources,
 }
 
@@ -285,6 +288,23 @@ impl DemoListener {
                 self.sources.advanced.borrow_mut().set_checked(index, value != 0, Some(list));
             }
             return false;
+        }
+        if id == tbid!("select position") {
+            // The layout test window: the position of its three layouts.
+            // TB: LayoutWindow::OnEvent
+            let pos = match value {
+                1 => LayoutPosition::LeftTop,
+                2 => LayoutPosition::RightBottom,
+                3 => LayoutPosition::Gravity,
+                _ => LayoutPosition::Center,
+            };
+            if let Some(win) = ui.parent_window(target) {
+                let layouts: Vec<WidgetId> = (1..=3).filter_map(|i| ui.find_as::<Layout>(win, TbId(i))).collect();
+                for layout in layouts {
+                    ui.with_widget::<Layout, _>(layout, |l, cx| l.configure(cx, |l| l.position = pos));
+                }
+            }
+            return true;
         }
         if id == tbid!("filter") {
             // TB: ListWindow::OnEvent and AdvancedListWindow::OnEvent
@@ -504,6 +524,24 @@ impl UiListener for DemoListener {
                 }
                 ui.resize_to_fit_content(w, ResizeFit::CurrentOrNeeded);
             }
+        } else if id == tbid!("toggle axis") {
+            // The layout test window: its three layouts get the axis, and the layout
+            // that holds them the other one. TB: LayoutWindow::OnEvent
+            if let Some(w) = win {
+                let axis = self.layout_axis;
+                let set = |ui: &mut Ui, layout: WidgetId, axis: Axis| {
+                    ui.with_widget::<Layout, _>(layout, |l, cx| l.configure(cx, |l| l.axis = axis));
+                };
+                let layouts: Vec<WidgetId> = (1..=3).filter_map(|i| ui.find_as::<Layout>(w, TbId(i))).collect();
+                for layout in layouts {
+                    set(ui, layout, axis);
+                }
+                self.layout_axis = axis.other();
+                if let Some(outer) = ui.find_as::<Layout>(w, tbid!("switch_layout")) {
+                    set(ui, outer, self.layout_axis);
+                }
+                ui.resize_to_fit_content(w, ResizeFit::CurrentOrNeeded);
+            }
         } else if id == tbid!("start_spinner") || id == tbid!("stop_spinner") {
             if let Some(sp) = win.and_then(|w| ui.find(w, tbid!("spinner"))) {
                 ui.set_value(sp, (id == tbid!("start_spinner")) as i32);
@@ -679,7 +717,7 @@ impl Demo {
         let frame_counter = ui.add(root, FrameCounter::default());
         ui.set_ignore_input(frame_counter, true);
         let sources = Sources::new();
-        ui.add_listener(Box::new(DemoListener { tab_axis: Axis::X, sources: sources.clone() }));
+        ui.add_listener(Box::new(DemoListener { tab_axis: Axis::X, layout_axis: Axis::Y, sources: sources.clone() }));
         ui.create_bound_value(tbid!("continous-repaint"), ValueKind::Int);
         let main = open_main_window(&mut ui);
         // TB's demo starts with these windows open too.

@@ -634,3 +634,69 @@ fn demo_host_extras_headless() {
     let corner = before.chunks_exact(4).zip(soft.pixels().chunks_exact(4)).filter(|(a, b)| a != b).count();
     assert!(corner > 0, "the frame number changed");
 }
+
+/// The layout test window's controls: the position dropdown and the axis button.
+/// TB: LayoutWindow::OnEvent
+#[test]
+fn demo_layout_window_controls_headless() {
+    use turbo_ferret::layout::stack::LayoutPosition;
+    use turbo_ferret::widgets::{Layout, MenuWindow, SelectDropdown, SelectList};
+    let size = Size::new(1280, 800);
+    let mut demo = Demo::new(&default_resource_root(), size, 96);
+    let root = demo.ui.root();
+    let mut soft = SoftRenderer::new(size);
+    let run = |demo: &mut Demo, ms: u64| {
+        for _ in 0..ms / 16 {
+            let t = demo.ui.now() + 16;
+            demo.frame(t);
+        }
+    };
+    let click = |demo: &mut Demo, w: WidgetId| {
+        let r = demo.ui.rect(w);
+        let p = demo.ui.to_root(w, Point::new(r.w / 2, r.h / 2));
+        demo.ui.pointer_down(p, 1, Modifiers::NONE);
+        demo.ui.pointer_up(p, Modifiers::NONE);
+    };
+    let top = |demo: &Demo| *demo.ui.children(root).last().unwrap();
+    run(&mut demo, 500);
+    turbo_ferret_demo::open_resource_window(&mut demo.ui, "demo01/ui_resources/test_layout01.tb.txt").unwrap();
+    run(&mut demo, 400);
+    let win = top(&demo);
+    assert_eq!(demo.ui.text(win), Some("Layout size & gravity"));
+    let layouts: Vec<WidgetId> = (1..=3).map(|i| demo.ui.find_as::<Layout>(win, TbId(i)).expect("layout")).collect();
+    let outer = demo.ui.find_as::<Layout>(win, tbid!("switch_layout")).unwrap();
+    let axes = |demo: &Demo| -> Vec<Axis> {
+        layouts.iter().chain([&outer]).map(|&l| demo.ui.get::<Layout>(l).unwrap().axis).collect()
+    };
+    let positions = |demo: &Demo| -> Vec<LayoutPosition> {
+        layouts.iter().map(|&l| demo.ui.get::<Layout>(l).unwrap().position).collect()
+    };
+    assert_eq!(axes(&demo), [Axis::X, Axis::X, Axis::X, Axis::Y]);
+    assert_eq!(positions(&demo), [LayoutPosition::Center; 3]);
+    shot(&mut demo, &mut soft, "demo_layout_before.png");
+
+    // The dropdown: choose "right / bottom".
+    let drop = demo.ui.find_as::<SelectDropdown>(win, tbid!("select position")).unwrap();
+    click(&mut demo, drop);
+    run(&mut demo, 300);
+    let menu = top(&demo);
+    let list = demo.ui.get::<MenuWindow>(menu).expect("the dropdown's menu").list().unwrap();
+    let item = demo.ui.get::<SelectList>(list).unwrap().item_widget(&demo.ui, 2).unwrap();
+    click(&mut demo, item);
+    run(&mut demo, 400);
+    assert_eq!(positions(&demo), [LayoutPosition::RightBottom; 3]);
+    shot(&mut demo, &mut soft, "demo_layout_right_bottom.png");
+
+    // The button: the three layouts go vertical and the one holding them horizontal,
+    // and back.
+    let toggle = demo.ui.find(win, tbid!("toggle axis")).unwrap();
+    let before = demo.ui.rect(win).size();
+    click(&mut demo, toggle);
+    run(&mut demo, 100);
+    assert_eq!(axes(&demo), [Axis::Y, Axis::Y, Axis::Y, Axis::X]);
+    assert_ne!(demo.ui.rect(win).size(), before, "the window grew to fit");
+    shot(&mut demo, &mut soft, "demo_layout_toggled.png");
+    click(&mut demo, toggle);
+    run(&mut demo, 100);
+    assert_eq!(axes(&demo), [Axis::X, Axis::X, Axis::X, Axis::Y]);
+}
