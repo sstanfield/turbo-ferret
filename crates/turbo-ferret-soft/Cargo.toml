@@ -1,0 +1,15 @@
+[package]
+name = "turbo-ferret-soft"
+description = "Software renderer for Turbo Ferret (a Rust port of Turbo Badger): draws into an RGBA buffer. no_std, zero dependencies."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+include = ["src/**/*.rs", "Cargo.toml", "LICENSE", "NOTICE"]
+
+[dependencies]
+turbo-ferret = { path = "../turbo-ferret", default-features = false }
+
+[dev-dependencies]
+turbo-ferret = { path = "../turbo-ferret" }
+png = "0.17"

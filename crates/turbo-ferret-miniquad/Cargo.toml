@@ -1,0 +1,11 @@
+[package]
+name = "turbo-ferret-miniquad"
+description = "miniquad (OpenGL/GLES/WebGL) backend and input adapter for Turbo Ferret (a Rust port of Turbo Badger)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+include = ["src/**/*.rs", "Cargo.toml", "LICENSE", "NOTICE"]
+
+[dependencies]
+turbo-ferret = { path = "../turbo-ferret" }

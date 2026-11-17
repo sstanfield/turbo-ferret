@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = ["crates/turbo-ferret", "crates/turbo-ferret-soft", "crates/turbo-ferret-miniquad", "demo"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.86"
+license = "Zlib"
+repository = "https://github.com/fruxo/turbobadger"

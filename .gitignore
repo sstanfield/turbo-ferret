@@ -1,0 +1,5 @@
+/target
+/turbobadger
+**/*.rs.bk
+/tests/golden/*.actual.png
+.DS_Store

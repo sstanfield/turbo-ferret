@@ -1,0 +1,12 @@
+[package]
+name = "turbo-ferret-demo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+turbo-ferret = { path = "../crates/turbo-ferret" }
+turbo-ferret-soft = { path = "../crates/turbo-ferret-soft" }
+turbo-ferret-miniquad = { path = "../crates/turbo-ferret-miniquad" }

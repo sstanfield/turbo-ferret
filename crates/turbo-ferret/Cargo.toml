@@ -1,0 +1,22 @@
+[package]
+name = "turbo-ferret"
+description = "A small, host-driven UI toolkit for games. A Rust port of Turbo Badger by Emil Segerås."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["ui", "gui", "game", "no_std", "widgets"]
+categories = ["gui", "game-development", "no-std"]
+include = ["src/**/*.rs", "Cargo.toml", "README.md", "LICENSE", "NOTICE"]
+
+[features]
+default = ["std", "png"]
+std = []
+png = []
+debug = []
+
+[dependencies]
+
+[dev-dependencies]
+png = "0.17"
