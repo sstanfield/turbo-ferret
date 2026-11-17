@@ -8,6 +8,7 @@
 pub mod resource_edit;
 pub mod sources;
 
+use std::cell::Cell;
 use std::rc::Rc;
 
 use turbo_ferret::anim::{ALMOST_ZERO_OPACITY, AnimSpec, Curve};
@@ -90,6 +91,51 @@ impl Widget for EditWindowState {
                 cx.set_text(info, &text);
             }
         }
+    }
+}
+
+/// Draws the frame number (and the frame rate while "Continuous repaint" is on)
+/// in the corner of the root. TB: DemoApplication::RenderFrame
+#[derive(Default)]
+struct FrameCounter {
+    continuous: bool,
+    /// Frames painted in all, frames since `since`, and the last rate worked out.
+    total: Cell<u32>,
+    frames: Cell<u32>,
+    since: Cell<u64>,
+    fps: Cell<u32>,
+}
+
+impl Widget for FrameCounter {
+    fn type_name(&self) -> &'static str {
+        "FrameCounter"
+    }
+
+    /// Cover the root.
+    fn on_process(&mut self, cx: &mut Ctx) {
+        let me = cx.this();
+        if let Some(p) = cx.parent(me) {
+            let size = cx.rect(p).size();
+            cx.set_rect(me, Rect::from_size(size));
+        }
+    }
+
+    fn paint(&self, p: &mut PaintCtx) {
+        self.total.set(self.total.get() + 1);
+        self.frames.set(self.frames.get() + 1);
+        // Update the FPS counter
+        let (now, since) = (p.now(), self.since.get());
+        if now > since + 1000 {
+            self.fps.set((u64::from(self.frames.get()) * 1000 / (now - since)) as u32);
+            self.since.set(now);
+            self.frames.set(0);
+        }
+        let text = if self.continuous {
+            format!("FPS: {} Frame {}", self.fps.get(), self.total.get())
+        } else {
+            format!("Frame {}", self.total.get())
+        };
+        p.draw_text(Point::new(5, 5), Color::rgb(255, 255, 255), &text);
     }
 }
 
@@ -332,8 +378,21 @@ impl UiListener for DemoListener {
                 }
             }
         } else if id == tbid!("reload skin bitmaps") {
-            ui.renderer_lost();
-            message(ui, target, TbId::NONE, "GFX load performance", "The skin and font bitmaps were dropped.");
+            // TB: MainWindow::OnEvent ("reload skin bitmaps")
+            let reload_count = 10;
+            let start = std::time::Instant::now();
+            let mut failed = None;
+            for _ in 0..reload_count {
+                if let Err(e) = ui.reload_skin_bitmaps() {
+                    failed = Some(e);
+                }
+            }
+            let ms = start.elapsed().as_millis();
+            let text = match failed {
+                None => format!("Reloading the skin graphics {reload_count} times took {ms}ms"),
+                Some(e) => format!("Reloading the skin graphics failed: {e}"),
+            };
+            message(ui, target, TbId::NONE, "GFX load performance", &text);
         } else if id == tbid!("test context lost") {
             ui.renderer_lost();
             let text = "Dropped every bitmap as after a lost context.\n\nDoes everything look fine?";
@@ -577,29 +636,21 @@ pub fn open_main_window(ui: &mut Ui) -> Option<WidgetId> {
     Some(w)
 }
 
-/// TB's resource files name files from TB's own working directory
-/// (`Demo/demo01/images/image_1.png`). Here those are under the resource root
-/// without `Demo/`.
-struct DemoLoader(FsLoader);
-
-impl ResourceLoader for DemoLoader {
-    fn load(&mut self, path: &str) -> Result<std::borrow::Cow<'static, [u8]>, LoadError> {
-        self.0.load(path.strip_prefix("Demo/").unwrap_or(path))
-    }
-}
-
 /// The demo state: a `Ui` with the skin, fonts and language loaded and the main
 /// window open.
 pub struct Demo {
     pub ui: Ui,
     pub main: Option<WidgetId>,
     pub sources: Sources,
+    frame_counter: WidgetId,
+    /// The mouse button went down as a finger (see `finger_down`).
+    touching: bool,
 }
 
 impl Demo {
     /// TB: Demo01.cpp DemoApplication::Init
     pub fn new(resource_root: &str, viewport: Size, dpi: i32) -> Demo {
-        let mut ui = Ui::new(Config::for_dpi(dpi), Services::with_loader(DemoLoader(FsLoader::new(resource_root))));
+        let mut ui = Ui::new(Config::for_dpi(dpi), Services::with_loader(FsLoader::new(resource_root)));
         if let Err(e) = ui.load_language("language/lng_en.tb.txt") {
             eprintln!("demo: language: {e}");
         }
@@ -625,6 +676,8 @@ impl Demo {
         // The demo background (a tile from the demo skin).
         let root = ui.root();
         ui.set_skin(root, tbid!("background"));
+        let frame_counter = ui.add(root, FrameCounter::default());
+        ui.set_ignore_input(frame_counter, true);
         let sources = Sources::new();
         ui.add_listener(Box::new(DemoListener { tab_axis: Axis::X, sources: sources.clone() }));
         ui.create_bound_value(tbid!("continous-repaint"), ValueKind::Int);
@@ -637,16 +690,52 @@ impl Demo {
         if let Some(m) = main {
             ui.activate_window(m);
         }
-        Demo { ui, main, sources }
+        Demo { ui, main, sources, frame_counter, touching: false }
     }
 
     /// One frame of host work: time, update, and whether to repaint.
     pub fn frame(&mut self, now_ms: u64) -> bool {
         self.ui.set_time(now_ms);
         self.ui.update();
-        if self.ui.bound_value(tbid!("continous-repaint")).is_some_and(|v| v.as_int() != 0) {
+        let continuous = self.ui.bound_value(tbid!("continous-repaint")).is_some_and(|v| v.as_int() != 0);
+        if continuous {
             self.ui.invalidate();
         }
+        self.ui.with_widget::<FrameCounter, _>(self.frame_counter, |c, _| c.continuous = continuous);
         self.ui.take_repaint()
+    }
+
+    /// TB's demo treats the mouse as a finger while shift, ctrl or alt is held
+    /// down, to try touch input without a touch screen. TB: port_glfw.cpp
+    /// ShouldEmulateTouchEvent
+    pub fn emulates_touch(mods: Modifiers) -> bool {
+        mods.intersects(Modifiers::SHIFT.union(Modifiers::CTRL).union(Modifiers::ALT))
+    }
+
+    /// The mouse button went down while `emulates_touch`: a finger touches.
+    pub fn finger_down(&mut self, p: Point, clicks: u32, mods: Modifiers) -> bool {
+        self.touching = true;
+        self.ui.touch_down(0, p, clicks, mods)
+    }
+
+    /// The mouse moved. True if this was handled as a finger: it moves while it is
+    /// down, and a finger that is not down does not hover.
+    pub fn finger_move(&mut self, p: Point, mods: Modifiers) -> bool {
+        if self.touching {
+            self.ui.touch_move(0, p, mods);
+            true
+        } else {
+            Demo::emulates_touch(mods)
+        }
+    }
+
+    /// The mouse button went up. True if it had gone down as a finger.
+    pub fn finger_up(&mut self, p: Point, mods: Modifiers) -> bool {
+        if !self.touching {
+            return false;
+        }
+        self.touching = false;
+        self.ui.touch_up(0, p, mods);
+        true
     }
 }

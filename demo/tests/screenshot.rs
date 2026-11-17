@@ -320,7 +320,7 @@ fn demo_m7_windows_headless() {
     // The text window: styled text with embedded widgets.
     let edit = demo.ui.find_as::<EditField>(root, tbid!("editfield")).expect("the text window's field");
     let text_win = demo.ui.parent_window(edit).unwrap();
-    assert!(demo.ui.text(edit).unwrap().starts_with("Turbo Badger - Fast UI toolkit"));
+    assert!(demo.ui.text(edit).unwrap().starts_with("Turbo Ferret - a Rust port of Turbo Badger"));
     assert!(demo.ui.get::<EditField>(edit).unwrap().is_styling());
     let undo = demo.ui.find(text_win, tbid!("undo")).unwrap();
     assert!(demo.ui.has_state(undo, WidgetState::DISABLED), "nothing to undo yet");
@@ -444,7 +444,7 @@ fn demo_m8_windows_headless() {
     let text_win = demo.ui.parent_window(edit).unwrap();
     demo.ui.activate_window(text_win);
     let segoe = demo.ui.calculated_font(edit);
-    let segoe_width = demo.ui.text_width(segoe, "Turbo Badger");
+    let segoe_width = demo.ui.text_width(segoe, "Turbo Ferret");
     for (item_id, font, shot_name) in [
         (tbid!("ttf font Vera"), tbid!("Vera"), "demo_m8_truetype.png"),
         (tbid!("ttf font VeraGlow"), tbid!("VeraGlowText"), "demo_m8_truetype_glow.png"),
@@ -467,7 +467,7 @@ fn demo_m8_windows_headless() {
         let face = demo.ui.fonts().face(fd);
         assert_eq!(face.desc(), fd, "the TrueType face was created");
         assert!(!face.is_box_font());
-        assert_ne!(demo.ui.text_width(fd, "Turbo Badger"), segoe_width, "another font, other widths");
+        assert_ne!(demo.ui.text_width(fd, "Turbo Ferret"), segoe_width, "another font, other widths");
         shot(&mut demo, &mut soft, shot_name);
     }
     // The glow: a blurred face behind the text face.
@@ -480,7 +480,7 @@ fn demo_m8_windows_headless() {
     click_id(&mut demo, main, tbid!("test-image"));
     run(&mut demo, 400);
     let image_win = top(&demo);
-    assert_eq!(demo.ui.text(image_win), Some("TBImageWidget"));
+    assert_eq!(demo.ui.text(image_win), Some("ImageWidget"));
     let images = |demo: &Demo| -> Vec<WidgetId> {
         let mut found = Vec::new();
         let mut stack = vec![image_win];
@@ -497,7 +497,7 @@ fn demo_m8_windows_headless() {
     assert_eq!(demo.ui.images().len(), 9);
     let first = demo.ui.get::<ImageWidget>(widgets[0]).unwrap().image().clone();
     assert_eq!(first.size(), Size::new(256, 171));
-    assert_eq!(first.name(), "Demo/demo01/images/image_1.png");
+    assert_eq!(first.name(), "demo01/images/image_1.png");
     drop(first);
     shot(&mut demo, &mut soft, "demo_m8_images.png");
     // The button on an image removes it, and the image is unloaded.
@@ -540,4 +540,97 @@ fn demo_m8_windows_headless() {
     shot(&mut demo, &mut soft, "demo_m8_debug_batches.png");
     let stats = demo.ui.debug_frame_stats();
     assert!(stats.batches > 0 && stats.triangles > 1000, "{stats:?}");
+}
+
+/// What the demo's host adds, as TB's demo does: the mouse as a finger while a
+/// modifier is held, the skin reload timing, and the frame counter.
+#[test]
+fn demo_host_extras_headless() {
+    use turbo_ferret::widgets::{EditField, MenuWindow, MessageWindow};
+    let size = Size::new(1280, 800);
+    let mut demo = Demo::new(&default_resource_root(), size, 96);
+    let main = demo.main.unwrap();
+    let root = demo.ui.root();
+    let mut soft = SoftRenderer::new(size);
+    let run = |demo: &mut Demo, ms: u64| {
+        for _ in 0..ms / 16 {
+            let t = demo.ui.now() + 16;
+            demo.frame(t);
+        }
+    };
+    let top = |demo: &Demo| *demo.ui.children(root).last().unwrap();
+    let center = |demo: &Demo, w: WidgetId| {
+        let r = demo.ui.rect(w);
+        demo.ui.to_root(w, Point::new(r.w / 2, r.h / 2))
+    };
+    run(&mut demo, 500);
+
+    // Shift, ctrl or alt make the mouse a finger; nothing else does.
+    assert!(Demo::emulates_touch(Modifiers::SHIFT) && Demo::emulates_touch(Modifiers::ALT | Modifiers::CTRL));
+    assert!(!Demo::emulates_touch(Modifiers::NONE) && !Demo::emulates_touch(Modifiers::SUPER));
+
+    // A finger that is not down does not hover (and the plain mouse is not a finger).
+    let button = demo.ui.find(main, tbid!("test-connections")).unwrap();
+    let p = center(&demo, button);
+    assert!(!demo.finger_move(p, Modifiers::NONE), "no modifier: the mouse handles it");
+    assert!(demo.finger_move(p, Modifiers::SHIFT), "swallowed");
+    assert_eq!(demo.ui.hovered(), None);
+    assert!(!demo.finger_up(p, Modifiers::SHIFT), "it was not down");
+
+    // A tap clicks.
+    let windows = demo.ui.children(root).len();
+    assert!(demo.finger_down(p, 1, Modifiers::SHIFT));
+    assert!(demo.finger_move(p, Modifiers::SHIFT));
+    assert!(demo.finger_up(p, Modifiers::NONE), "released as a finger although the key is up by now");
+    run(&mut demo, 300);
+    assert_eq!(demo.ui.children(root).len(), windows + 1, "the connections window opened");
+    demo.ui.close_window(top(&demo));
+    run(&mut demo, 600);
+
+    // Holding a finger on a text field opens its context menu (the mouse needs the
+    // right button for that).
+    let edit = demo.ui.find_as::<EditField>(root, tbid!("editfield")).unwrap();
+    let text_win = demo.ui.parent_window(edit).unwrap();
+    demo.ui.activate_window(text_win);
+    let p = demo.ui.to_root(edit, Point::new(40, 12));
+    assert!(demo.finger_down(p, 1, Modifiers::ALT));
+    run(&mut demo, 1200);
+    let menu = top(&demo);
+    assert!(demo.ui.get::<MenuWindow>(menu).is_some(), "the long press opened the context menu");
+    demo.finger_up(p, Modifiers::ALT);
+    demo.ui.close_window(menu);
+    run(&mut demo, 600);
+
+    // Reloading the skin's bitmaps reports how long it took, and the skin still draws.
+    demo.ui.activate_window(main);
+    run(&mut demo, 100);
+    shot(&mut demo, &mut soft, "demo_extras_before_reload.png");
+    let before: Vec<u8> = soft.pixels().to_vec();
+    let reload = demo.ui.find(main, tbid!("reload skin bitmaps")).unwrap();
+    demo.ui.invoke_event(Event::new(EventKind::Click, reload));
+    run(&mut demo, 100);
+    let msg = top(&demo);
+    assert!(demo.ui.get::<MessageWindow>(msg).is_some());
+    assert_eq!(demo.ui.text(msg), Some("GFX load performance"));
+    let texts: Vec<String> = demo
+        .ui
+        .children(demo.ui.content_root(msg))
+        .iter()
+        .filter_map(|&c| demo.ui.find_as::<EditField>(c, TbId::NONE).or(Some(c)))
+        .filter_map(|c| demo.ui.text(c).map(str::to_string))
+        .collect();
+    assert!(texts.iter().any(|t| t.starts_with("Reloading the skin graphics 10 times took ")), "{texts:?}");
+    demo.ui.close_window(msg);
+    run(&mut demo, 800);
+    shot(&mut demo, &mut soft, "demo_extras_after_reload.png");
+    // The same picture, apart from the frame counter in the corner.
+    let differing = before
+        .chunks_exact(4)
+        .zip(soft.pixels().chunks_exact(4))
+        .enumerate()
+        .filter(|(i, (a, b))| a != b && !((i % 1280) < 200 && (i / 1280) < 30))
+        .count();
+    assert_eq!(differing, 0, "the skin looks the same after reloading");
+    let corner = before.chunks_exact(4).zip(soft.pixels().chunks_exact(4)).filter(|(a, b)| a != b).count();
+    assert!(corner > 0, "the frame number changed");
 }

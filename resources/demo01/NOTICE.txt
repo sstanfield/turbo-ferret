@@ -1,0 +1,10 @@
+These files come from Turbo Badger's demo (Demo/demo01 in
+https://github.com/fruxo/turbobadger, by Emil Segerås): the layouts in
+ui_resources, the demo skin and the images.
+
+The files in ui_resources are altered for Turbo Ferret, the Rust port: the
+texts they show name Turbo Ferret and its widgets instead of Turbo Badger's
+classes and build options, a few spelling mistakes in those texts are
+corrected, and image paths are relative to this resources folder. The widget
+type names (TBButton, TBLayout ...) and everything else are as in the
+originals.

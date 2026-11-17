@@ -1,5 +1,5 @@
 WindowInfo
-	title TBTabContainer & misc tests
+	title TabContainer & misc tests
 	position 770 430
 TBTabContainer
 	gravity all
@@ -29,7 +29,7 @@ TBTabContainer
 			TBButton: text: Overridden skin, skin: SpecialButton
 			TBButton: text: Disabled button, state: disabled
 		TBEditField
-			text TBEditField
+			text EditField
 			multiline 1
 	TBLayout
 		axis y

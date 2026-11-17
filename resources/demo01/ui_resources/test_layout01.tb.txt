@@ -1,5 +1,5 @@
 WindowInfo
-	title TBLayout size & gravity
+	title Layout size & gravity
 # Declare a branch of layout nodes that is included in all three containers below.
 test_layout_content
 	TBLayout

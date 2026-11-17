@@ -119,6 +119,15 @@ impl Ui {
         self.skin.defaults.spacing
     }
 
+    /// Load the skin's bitmaps again from their files (after they changed on disk,
+    /// for example). TB: TBSkin::ReloadBitmaps
+    pub fn reload_skin_bitmaps(&mut self) -> Result<(), SkinError> {
+        let Ui { skin, services, .. } = self;
+        let r = skin.reload_bitmaps(&mut *services.loader, &mut *services.images);
+        self.repaint = true;
+        r
+    }
+
     /// The renderer lost its context: forget every bitmap; the next paint recreates
     /// them. TB: TBRendererListener::OnContextLost/Restored
     pub fn renderer_lost(&mut self) {

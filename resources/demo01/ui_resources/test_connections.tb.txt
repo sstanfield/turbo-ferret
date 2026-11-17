@@ -1,5 +1,5 @@
 WindowInfo
-	title TBWidgetValue connections
+	title Value connections
 TBLayout
 	axis y
 	TBTextField

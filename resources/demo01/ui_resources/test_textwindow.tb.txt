@@ -18,11 +18,10 @@ TBLayout: axis: y, distribution: available
 				TBTextField: text: Menu
 				skin TBButton.flat
 	TBEditField: multiline: 1, styling: 1, gravity: all, id: editfield, autofocus: 1
-		text: "Turbo Badger - Fast UI toolkit\n\n" \
+		text: "Turbo Ferret - a Rust port of Turbo Badger\n\n" \
 				"<color #0794f8>Test zone</color>\n" \
-				"The menu to the left spawns some examples of features in turbo badger.\n\n" \
-				"The code in Demo/* is more like a developers test zone than organized tutorial-like samples. " \
-				"This would be good to fix of course (help is welcome! ;)\n\n" \
+				"The menu to the left spawns some examples of features in Turbo Ferret.\n\n" \
+				"This demo is Turbo Badger's demo01, ported: the windows are built from its resource files (resources/demo01), and the code in demo/ is a test zone more than a tutorial.\n\n" \
 				"<color #0794f8>Some things to try out</color>\n" \
 				" • All layouts provide panning of content automatically when squashed below the minimal size, so try resizing windows and pan.\n" \
 				" • Lines starting with a bullet sequence (like this one) should wrap in a smart way.\n" \
@@ -30,6 +29,6 @@ TBLayout: axis: y, distribution: available
 				" • Keyboard navigation using tab.\n" \
 				" • <u>Underline</u>, <color #f44>Red</color>, <color #6f6>Green</color>, <color #aaf>Blue</color>\n\n" \
 				"<color #0794f8>Good to know</color>\n" \
-				" • The text widget handles styling and embedded content (Example: <widget TBSkinImage: skin: 'Icon16'> <widget TBButton: text: 'Nice!'>), but does not handle editing of those fully. Those features are only ment for read-only text widgets for now.\n" \
-				" • You can emulate touch input by holding down shift, ctrl or alt. Touch input behaves differently in some widgets (f.ex long click to open context menu in textfields), and only invoke movement when down.\n" \
+				" • The text widget handles styling and embedded content (Example: <widget TBSkinImage: skin: 'Icon16'> <widget TBButton: text: 'Nice!'>), but does not handle editing of those fully. Those features are only meant for read-only text widgets for now.\n" \
+				" • You can emulate touch input with the mouse by holding down shift, ctrl or alt. Touch input behaves differently in some widgets (f.ex long click to open context menu in textfields), and only invoke movement when down.\n" \
 				" • All resources are UTF-8.\n"

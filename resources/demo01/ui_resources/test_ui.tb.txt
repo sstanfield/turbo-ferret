@@ -1,5 +1,5 @@
 WindowInfo
-	title Turbo Badger
+	title Turbo Ferret
 	position 10 50
 	size 250 630
 
@@ -10,18 +10,18 @@ TBLayout: axis: y, distribution-position: "left top", distribution: "available"
 			TBButton: skin: "TBButton.flat", text: "Radiobutton & Checkbox"
 				id: "test-layout"
 				data: "test_radio_checkbox.tb.txt"
-			TBButton: skin: "TBButton.flat", text: "TBSelectList", id: "test-list"
+			TBButton: skin: "TBButton.flat", text: "SelectList", id: "test-list"
 			TBButton: skin: "TBButton.flat", text: "ScrollContainer & misc.", id: "test-scroll-container"
-			TBButton: skin: "TBButton.flat", text: "TBWidgetValue connections", id: "test-connections"
-			TBButton: skin: "TBButton.flat", text: "TBImage", id: "test-image"
-			TBButton: skin: "TBButton.flat", text: "TBScrollerSnapListener", id: "test-page"
+			TBButton: skin: "TBButton.flat", text: "Value connections", id: "test-connections"
+			TBButton: skin: "TBButton.flat", text: "ImageWidget", id: "test-image"
+			TBButton: skin: "TBButton.flat", text: "Scroll snapping", id: "test-page"
 			TBButton: skin: "TBButton.flat", text: "Animations", id: "test-animations"
 			TBButton: skin: "TBButton.flat", text: "Skin conditions", id: "test-skin-conditions"
-			TBButton: skin: "TBButton.flat", text: "TBToggleContainer"
+			TBButton: skin: "TBButton.flat", text: "ToggleContainer"
 				id: "test-layout"
 				data: "test_toggle_containers.tb.txt"
 			TBButton: skin: "TBButton.flat", text: "Close with dim & alert", id: "TBWindow.close"
-			TBButton: skin: "TBButton.flat", text: "ResourceEditWindow", id: "test-resource-edit"
+			TBButton: skin: "TBButton.flat", text: "Resource editor", id: "test-resource-edit"
 
 	TBSection: value: 0, text: "Layout tests"
 		TBLayout: axis: y, spacing: 0, size: available
@@ -31,13 +31,13 @@ TBLayout: axis: y, distribution-position: "left top", distribution: "available"
 			TBButton: skin: "TBButton.flat", text: "Distribution"
 				id: "test-layout"
 				data: "test_layout02.tb.txt"
-			TBButton: skin: "TBButton.flat", text: "TBWidget default"
+			TBButton: skin: "TBButton.flat", text: "Widget default"
 				id: "test-layout"
 				data: "test_layout03.tb.txt"
 
 	TBSection: value: 0, text: "Graphics tests"
 		TBLayout: axis: y, spacing: 0, size: available
-			TBClickLabel: text: "Continous repaint"
+			TBClickLabel: text: "Continuous repaint"
 				lp: max-width: 0
 				TBCheckBox: connection: continous-repaint
 			TBButton: skin: "TBButton.flat", text: "Reload skin bitmaps", id: "reload skin bitmaps"
@@ -45,8 +45,8 @@ TBLayout: axis: y, distribution-position: "left top", distribution: "available"
 
 	TBSection: value: 0, text: "Message tests"
 		TBLayout: axis: y, spacing: 0, size: available
-			TBButton: skin: "TBButton.flat", text: "PostMessage", id: "msg"
-			TBButton: skin: "TBButton.flat", text: "PostMessageDelayed", id: "delayedmsg"
+			TBButton: skin: "TBButton.flat", text: "Post message", id: "msg"
+			TBButton: skin: "TBButton.flat", text: "Post delayed message", id: "delayedmsg"
 			TBClickLabel: text: "Busy message loop"
 				lp: max-width: 0
 				TBCheckBox: id: "busymsg"

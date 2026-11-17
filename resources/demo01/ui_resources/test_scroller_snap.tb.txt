@@ -1,5 +1,5 @@
 WindowInfo
-	title TBScrollerSnapListener
+	title Scroll snapping
 definitions
 	pagesize
 		lp: width: 200, height: 300

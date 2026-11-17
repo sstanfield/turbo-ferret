@@ -1,8 +1,8 @@
 WindowInfo
-	title TBToggleContainer
+	title ToggleContainer
 TBLayout: axis: y
 	TBEditField: gravity: all, adapt-to-content: 1, multiline: 1, readonly: 1, skin: 0, virtual-width: 400
-		text: "TBToggleContainer used with TBWidgetValue connections to automatically toggle a group of items (no programming needed)."
+		text: "ToggleContainer used with value connections to automatically toggle a group of items (no programming needed)."
 
 	TBLayout: position: top left
 		TBContainer

@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use miniquad::conf::Conf;
 use miniquad::{EventHandler, KeyCode, KeyMods, MouseButton, PassAction, TouchPhase, conf, window};
-use turbo_ferret::geom::Size;
+use turbo_ferret::geom::{Point, Size};
 use turbo_ferret_demo::{Demo, default_resource_root};
 use turbo_ferret_miniquad::{InputAdapter, MiniquadClipboard, MiniquadRenderer, window_dpi};
 
@@ -75,7 +75,9 @@ impl EventHandler for Stage {
 
     fn mouse_motion_event(&mut self, x: f32, y: f32) {
         self.tick();
-        self.input.mouse_motion_event(&mut self.demo.ui, x, y);
+        if !self.demo.finger_move(point(x, y), self.input.modifiers()) {
+            self.input.mouse_motion_event(&mut self.demo.ui, x, y);
+        }
     }
 
     fn mouse_wheel_event(&mut self, x: f32, y: f32) {
@@ -85,12 +87,23 @@ impl EventHandler for Stage {
 
     fn mouse_button_down_event(&mut self, button: MouseButton, x: f32, y: f32) {
         self.tick();
-        self.input.mouse_button_down_event(&mut self.demo.ui, button, x, y);
+        let mods = self.input.modifiers();
+        if button == MouseButton::Left && Demo::emulates_touch(mods) {
+            // With shift, ctrl or alt held, the mouse is a finger.
+            let p = point(x, y);
+            let clicks = self.input.click_counter_mut().press(self.demo.ui.now(), p);
+            self.demo.finger_down(p, clicks, mods);
+        } else {
+            self.input.mouse_button_down_event(&mut self.demo.ui, button, x, y);
+        }
     }
 
     fn mouse_button_up_event(&mut self, button: MouseButton, x: f32, y: f32) {
         self.tick();
-        self.input.mouse_button_up_event(&mut self.demo.ui, button, x, y);
+        let handled = button == MouseButton::Left && self.demo.finger_up(point(x, y), self.input.modifiers());
+        if !handled {
+            self.input.mouse_button_up_event(&mut self.demo.ui, button, x, y);
+        }
     }
 
     fn char_event(&mut self, character: char, keymods: KeyMods, repeat: bool) {
@@ -120,6 +133,11 @@ impl EventHandler for Stage {
     fn window_minimized_event(&mut self) {
         self.input.focus_lost(&mut self.demo.ui);
     }
+}
+
+/// A mouse position in the UI's pixels.
+fn point(x: f32, y: f32) -> Point {
+    Point::new(x.floor() as i32, y.floor() as i32)
 }
 
 fn main() {

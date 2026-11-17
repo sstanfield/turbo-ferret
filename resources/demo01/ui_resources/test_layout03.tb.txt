@@ -1,5 +1,5 @@
 WindowInfo
-	title Default TBWidget positioning
+	title Default widget positioning
 	size 350 350
 TBLayout: axis: y, distribution: gravity
 	TBLayout: distribution: available, gravity: left right
